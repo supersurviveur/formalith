@@ -1,0 +1,12 @@
+[package]
+name = "formalith"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+append-only-vec = "0.1.7"
+malachite = { version = "0.5.1" }
+owo-colors = "4.2.0"
+
+# [profile.release]
+# debug = 1
