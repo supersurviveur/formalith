@@ -1,6 +1,8 @@
+//! Implementation of operations over [Term].
+
 use std::cmp::Ordering;
 
-use crate::field::{Group, Ring};
+use crate::field::Ring;
 
 use super::{Add, Mul, Pow, Term, Value};
 
@@ -98,7 +100,7 @@ impl<T: Ring> std::ops::AddAssign<&Self> for Term<T> {
 impl<T: Ring> std::ops::Add<&Self> for Term<T> {
     type Output = Self;
 
-    fn add(mut self, rhs: &Self) -> Self::Output {
+    fn add(self, rhs: &Self) -> Self::Output {
         &self + rhs
     }
 }
@@ -106,7 +108,7 @@ impl<T: Ring> std::ops::Add<&Self> for Term<T> {
 impl<T: Ring> std::ops::Add for Term<T> {
     type Output = Self;
 
-    fn add(mut self, rhs: Self) -> Self::Output {
+    fn add(self, rhs: Self) -> Self::Output {
         &self + &rhs
     }
 }
@@ -114,7 +116,7 @@ impl<T: Ring> std::ops::Add for Term<T> {
 impl<T: Ring> std::ops::Mul for &Term<T> {
     type Output = Term<T>;
 
-    fn mul(mut self, rhs: Self) -> Self::Output {
+    fn mul(self, rhs: Self) -> Self::Output {
         let ring = self.get_set();
         if let Term::Mul(a1) = self {
             if let Term::Mul(a2) = rhs {
@@ -124,7 +126,7 @@ impl<T: Ring> std::ops::Mul for &Term<T> {
                 let mut a1_cursor = a1_iter.next();
                 let mut a2_cursor = a2_iter.next();
                 while a1_cursor.is_some() || a2_cursor.is_some() {
-                    if let Some(mut a1) = a1_cursor {
+                    if let Some(a1) = a1_cursor {
                         if let Some(a2) = a2_cursor {
                             match a1.cmp_factors(&a2) {
                                 std::cmp::Ordering::Less => {
@@ -205,7 +207,7 @@ impl<T: Ring> std::ops::MulAssign for Term<T> {
 impl<T: Ring> std::ops::Mul<&Self> for Term<T> {
     type Output = Self;
 
-    fn mul(mut self, rhs: &Self) -> Self::Output {
+    fn mul(self, rhs: &Self) -> Self::Output {
         &self * rhs
     }
 }
@@ -213,7 +215,7 @@ impl<T: Ring> std::ops::Mul<&Self> for Term<T> {
 impl<T: Ring> std::ops::Mul for Term<T> {
     type Output = Self;
 
-    fn mul(mut self, rhs: Self) -> Self::Output {
+    fn mul(self, rhs: Self) -> Self::Output {
         &self * &rhs
     }
 }
@@ -240,7 +242,7 @@ impl<T: Ring> std::ops::DivAssign for Term<T> {
 impl<T: Ring> std::ops::Div<&Self> for Term<T> {
     type Output = Self;
 
-    fn div(mut self, rhs: &Self) -> Self::Output {
+    fn div(self, rhs: &Self) -> Self::Output {
         &self / rhs
     }
 }
@@ -248,7 +250,7 @@ impl<T: Ring> std::ops::Div<&Self> for Term<T> {
 impl<T: Ring> std::ops::Div for Term<T> {
     type Output = Self;
 
-    fn div(mut self, rhs: Self) -> Self::Output {
+    fn div(self, rhs: Self) -> Self::Output {
         &self / &rhs
     }
 }
@@ -271,10 +273,7 @@ impl<T: Ring> std::ops::Neg for &Term<T> {
             Term::Add(ref add) => {
                 let ring = add.ring;
                 new = Term::Mul(Mul::new(
-                    vec![
-                        new,
-                        Term::Value(Value::new(ring.neg(&ring.one()), ring)),
-                    ],
+                    vec![new, Term::Value(Value::new(ring.neg(&ring.one()), ring))],
                     ring,
                 ))
             }
@@ -296,19 +295,16 @@ impl<T: Ring> std::ops::Neg for &Term<T> {
                     ring,
                 ))
             }
-            Term::Fun(fun) => todo!(),
+            Term::Fun(_) => todo!(),
         }
         new
     }
 }
 
 impl<T: Ring> Term<T> {
+    /// Compute `self^exposant`
     pub fn pow(&self, exposant: &Term<T::ExposantSet>) -> Term<T> {
-        let res = Term::Pow(Pow::new(
-            self.clone(),
-            exposant.clone(),
-            self.get_set(),
-        ));
+        let res = Term::Pow(Pow::new(self.clone(), exposant.clone(), self.get_set()));
         res.normalize()
     }
 }

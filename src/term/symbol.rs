@@ -1,8 +1,11 @@
+//! Symbol expression.
+
 use std::fmt::Display;
 
 use crate::{
     context::{Context, Symbol},
-    field::{Field, Group, Ring},
+    field::Group,
+    printer::{PrettyPrinter, Print, PrintOptions},
 };
 
 use super::{Flags, NORMALIZED};
@@ -25,6 +28,7 @@ impl<T: Group> Flags for SymbolTerm<T> {
 }
 
 impl<T: Group> SymbolTerm<T> {
+    /// Create a new symbol expression
     pub fn new(symbol: Symbol, ring: &'static T) -> Self {
         Self {
             flags: NORMALIZED,
@@ -33,8 +37,17 @@ impl<T: Group> SymbolTerm<T> {
         }
     }
 }
+impl<T: Group> Print for SymbolTerm<T> {
+    fn print(&self, _options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", Context::get_symbol_data(&self.symbol).name)
+    }
+
+    fn pretty_print(&self, _options: &PrintOptions) -> crate::printer::PrettyPrinter {
+        PrettyPrinter::from(Context::get_symbol_data(&self.symbol).name.clone())
+    }
+}
 impl<T: Group> Display for SymbolTerm<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", Context::get_symbol_data(&self.symbol).name)
+        Print::fmt(self, &PrintOptions::default(), f)
     }
 }

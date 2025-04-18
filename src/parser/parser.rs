@@ -1,3 +1,5 @@
+//! Parser implementation.
+
 use std::fmt::Debug;
 use std::iter::Peekable;
 use std::ops::Range;
@@ -14,43 +16,46 @@ pub(crate) enum Op {
     Substract,
     Multiply,
     Divide,
-    Modulus,
     Pow,
 }
 impl Op {
     pub fn get_priority(&self) -> usize {
         match self {
-            Op::Pow | Op::Modulus => 14,
+            Op::Pow => 14,
             Op::Multiply | Op::Divide => 13,
             Op::Add | Op::Substract => 12,
         }
     }
 }
 
-#[derive(Debug, Clone)]
+/// Represent an error raised by the parser
 #[allow(dead_code)]
+#[derive(Debug, Clone)]
 pub struct ParserError {
     message: String,
 }
 
 impl ParserError {
+    /// Create a new parser error.
     pub fn new(message: String) -> Self {
         Self { message }
     }
 }
 
+/// A parser over a string input.
 #[derive(Debug)]
 pub struct Parser<'a> {
     input: &'a str,
     lexer: Peekable<Lexer<'a>>,
     prev_token: Token,
+    /// The current token
     pub token: Token,
-
     start_span: usize,
     end_span: usize,
 }
 
 impl<'a> Parser<'a> {
+    /// Create a new parser over the `input` string.
     pub fn new(input: &'a str) -> Self {
         let mut parser = Parser {
             input,
@@ -96,6 +101,7 @@ impl Parser<'_> {
     fn span(&mut self) -> Range<usize> {
         self.start_span..self.end_span
     }
+    /// Eat a token with a specific kind, raising an error if the current token kind doesn't match.  
     pub fn expect_token(&mut self, kind: TokenKind) -> Result<(), ParserError> {
         match &self.token.kind {
             k if *k == kind => {
@@ -119,6 +125,7 @@ impl Parser<'_> {
             _ => None,
         }
     }
+    /// Parse the parser's string, returning the parsed mathematical expression.
     pub fn parse<E: Ring>(&mut self, set: &'static E) -> Result<Term<E>, ParserError> {
         Ok(self
             .parse_expression(0, set)?
@@ -147,6 +154,7 @@ impl Parser<'_> {
             _ => Ok(None),
         }
     }
+    /// Parse an expression, which can be a literal, a sum, a group ()...
     pub fn parse_expression<E: Ring>(
         &mut self,
         priority: usize,
@@ -154,7 +162,7 @@ impl Parser<'_> {
     ) -> Result<Option<Term<E>>, ParserError> {
         let node = set.parse_expression(self)?;
         let node = node.map_or_else(|| self.parse_unary(set), |n| Ok(Some(n)))?;
-        let node = node.map_or_else(|| self.parse_litteral(set), |n| Ok(Some(n)))?;
+        let node = node.map_or_else(|| self.parse_literal(set), |n| Ok(Some(n)))?;
         let node = node.map_or_else(|| self.parse_symbol(set), |n| Ok(Some(n)))?;
         let node = node.map_or_else(|| self.parse_group(set), |n| Ok(Some(n)))?;
         match node {
@@ -209,7 +217,6 @@ impl Parser<'_> {
                     Op::Substract => todo!(),
                     Op::Multiply => current * right,
                     Op::Divide => current / right,
-                    Op::Modulus => todo!(),
                     Op::Pow => unreachable!(),
                 },
                 true,
@@ -218,10 +225,10 @@ impl Parser<'_> {
         Ok((current, false))
     }
 
-    fn parse_litteral<E: Ring>(&mut self, set: &'static E) -> Result<Option<Term<E>>, ParserError> {
+    fn parse_literal<E: Ring>(&mut self, set: &'static E) -> Result<Option<Term<E>>, ParserError> {
         let content = &self.input[self.span()];
         match &self.token.kind {
-            TokenKind::Literral { .. } => {
+            TokenKind::Literal { .. } => {
                 let lit = Term::Value(Value::new(
                     set.parse_litteral(content)
                         .map_err(|err| ParserError::new(err))?,
@@ -246,6 +253,7 @@ impl Parser<'_> {
     }
 }
 
+/// Try parsing the given input inside the given set, returning a `Result`. See [parse].
 #[macro_export(local_inner_macros)]
 macro_rules! try_parse {
     ( $x:expr, $f:expr ) => {
@@ -253,6 +261,7 @@ macro_rules! try_parse {
     };
 }
 
+/// Parse the given input inside the given set, panic if it is incorrect.
 #[macro_export(local_inner_macros)]
 macro_rules! parse {
     ( $($args:tt)* ) => {

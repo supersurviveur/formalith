@@ -1,6 +1,11 @@
+//! Product expression.
+
 use std::fmt::Display;
 
-use crate::field::{Field, Group, Ring};
+use crate::{
+    field::{Group, Ring},
+    printer::{PrettyPrinter, Print, PrintOptions},
+};
 
 use super::{Flags, Term, Value};
 
@@ -22,6 +27,7 @@ impl<T: Group> Flags for Mul<T> {
 }
 
 impl<T: Group> Mul<T> {
+    /// Create a new product expression
     pub fn new(factors: Vec<Term<T>>, ring: &'static T) -> Self {
         Self {
             flags: 0,
@@ -84,28 +90,33 @@ impl<T: Ring> Mul<T> {
     }
 }
 
-impl<T: Group> Mul<T> {
-    pub fn fmt(&self) {
-        
+impl<T: Group> Print for Mul<T> {
+    fn print(&self, options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (i, factor) in self.factors.iter().enumerate() {
+            Self::group(factor, options, f)?;
+            if i != self.len() - 1 {
+                Self::operator("*", options, f)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn pretty_print(&self, options: &PrintOptions) -> crate::printer::PrettyPrinter {
+        let mut res: Option<PrettyPrinter> = None;
+        for term in self.factors.iter() {
+            let elem = Print::pretty_print(term, options);
+            if let Some(res) = &mut res {
+                res.concat("*", &elem);
+            } else {
+                res = Some(elem);
+            }
+        }
+        res.unwrap()
     }
 }
 
 impl<T: Group> Display for Mul<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (i, factor) in self.factors.iter().enumerate() {
-            let need_paren = match factor {
-                Term::Value(_) | Term::Symbol(_) | Term::Mul(_) | Term::Fun(_) => false,
-                Term::Add(_) | Term::Pow(_) => true,
-            };
-            if need_paren {
-                write!(f, "({})", factor)?;
-            } else {
-                write!(f, "{}", factor)?;
-            }
-            if i != self.len() - 1 {
-                write!(f, "*")?;
-            }
-        }
-        Ok(())
+        Print::fmt(self, &PrintOptions::default(), f)
     }
 }

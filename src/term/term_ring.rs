@@ -1,16 +1,22 @@
+//! The group/ring/field containing expressions as constants.
+
 use std::cmp::Ordering;
 
 use crate::field::{Field, Group, Ring};
 
 use super::{Term, Value};
 
+/// A ring where constants are complete expressions, like `2*x^2`. It is usefull for matrix and polynoms, to allow expressions inside coefficients.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TermField<T: Group>(&'static T);
+
 impl<T: Group> TermField<T> {
+    /// Create a new term field for the set `T`
     pub const fn new(ring: &'static T) -> Self {
         Self(ring)
     }
-    pub fn get_ring(&self) -> &'static T {
+    /// Get the inner set
+    pub fn get_set(&self) -> &'static T {
         self.0
     }
 }
@@ -25,7 +31,7 @@ impl<T: Ring> Group for TermField<T> {
     }
 
     fn zero(&self) -> Self::Element {
-        Term::Value(Value::new(self.get_ring().zero(), self.get_ring()))
+        Term::Value(Value::new(self.get_set().zero(), self.get_set()))
     }
 
     fn add(&self, a: &Self::Element, b: &Self::Element) -> Self::Element {
@@ -41,12 +47,15 @@ impl<T: Ring> Group for TermField<T> {
     }
 
     fn parse_litteral(&self, value: &str) -> Result<Term<T>, String> {
-        todo!()
+        Ok(Term::Value(Value::new(
+            self.0.parse_litteral(value)?,
+            self.get_set(),
+        )))
     }
 }
 impl<T: Ring> Ring for TermField<T> {
     fn one(&self) -> Self::Element {
-        Term::Value(Value::new(self.get_ring().one(), self.get_ring()))
+        Term::Value(Value::new(self.get_set().one(), self.get_set()))
     }
 
     fn mul(&self, a: &Self::Element, b: &Self::Element) -> Self::Element {
@@ -54,7 +63,7 @@ impl<T: Ring> Ring for TermField<T> {
     }
 
     fn nth(&self, nth: i64) -> Self::Element {
-        Term::Value(Value::new(self.get_ring().nth(nth), self.get_ring()))
+        Term::Value(Value::new(self.get_set().nth(nth), self.get_set()))
     }
 
     fn inv(&self, a: &Self::Element) -> Option<Self::Element> {

@@ -1,7 +1,13 @@
+//! Matrix implementation.
+
 use std::fmt::Display;
 
-use crate::field::{Group, Ring};
+use crate::{
+    field::{Group, Ring},
+    printer::{Print, PrintOptions},
+};
 
+/// A matrix with coefficients living in `T`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Matrix<T: Group> {
     size: (usize, usize),
@@ -10,35 +16,98 @@ pub struct Matrix<T: Group> {
 }
 
 impl<T: Group> Matrix<T> {
+    /// Create a new matrix
     pub fn new(size: (usize, usize), data: Vec<T::Element>, ring: &'static T) -> Self {
         Self { size, data, ring }
     }
 }
 
+impl<T: Group> std::ops::Add<&Self> for Matrix<T> {
+    type Output = Self;
+
+    fn add(mut self, rhs: &Self) -> Self::Output {
+        for (i, v) in rhs.data.iter().enumerate() {
+            self.ring.add_assign(&mut self.data[i], v);
+        }
+        self
+    }
+}
+
+impl<T: Group> std::ops::Add for Matrix<T> {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        self + &rhs
+    }
+}
+
+impl<T: Group> std::ops::Add for &Matrix<T> {
+    type Output = Matrix<T>;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        self.clone() + rhs
+    }
+}
+
+impl<T: Group> std::ops::Neg for &Matrix<T> {
+    type Output = Matrix<T>;
+
+    fn neg(self) -> Self::Output {
+        let mut res = self.clone();
+        for v in &mut res.data {
+            self.ring.neg_assign(v);
+        }
+        res
+    }
+}
+
+impl<T: Group> std::ops::Neg for Matrix<T> {
+    type Output = Matrix<T>;
+
+    fn neg(self) -> Self::Output {
+        -&self
+    }
+}
+
 impl<T: Group> PartialOrd for Matrix<T> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, _: &Self) -> Option<std::cmp::Ordering> {
+        // There is no order over matrix
+        None
+    }
+}
+
+impl<T: Group> Print for Matrix<T> {
+    fn print(
+        &self,
+        options: &crate::printer::PrintOptions,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        Self::group_delim("[", options, f)?;
+        for i in 0..self.size.0 {
+            Self::group_delim("[", options, f)?;
+            for j in i * self.size.0..(i + 1) * self.size.0 {
+                write!(f, "{}", self.data[j])?;
+                if j != (i + 1) * self.size.0 - 1 {
+                    Self::delimiter(",", options, f)?;
+                }
+            }
+            Self::group_delim("]", options, f)?;
+            if i != self.size.0 - 1 {
+                Self::delimiter(",", options, f)?;
+            }
+        }
+        Self::group_delim("]", options, f)?;
+        Ok(())
+    }
+
+    fn pretty_print(&self, options: &PrintOptions) -> crate::printer::PrettyPrinter {
         todo!()
     }
 }
 
 impl<T: Group> Display for Matrix<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[")?;
-        for i in 0..self.size.0 {
-            write!(f, "[")?;
-            for j in i * self.size.0..(i + 1) * self.size.0 {
-                write!(f, "{}", self.data[j])?;
-                if j != (i + 1) * self.size.0 - 1 {
-                    write!(f, ",")?;
-                }
-            }
-            write!(f, "]")?;
-            if i != self.size.0 - 1 {
-                write!(f, ",")?;
-            }
-        }
-        write!(f, "]")?;
-        Ok(())
+        Print::fmt(self, &PrintOptions::default(), f)
     }
 }
 

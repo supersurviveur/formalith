@@ -1,11 +1,16 @@
+//! Function expression.
+
 use std::fmt::Display;
+
+use owo_colors::colors::{Blue, Cyan};
 
 use crate::{
     context::{Context, Symbol},
-    field::{Field, Group, Ring},
+    field::Group,
+    printer::{Print, PrintOptions},
 };
 
-use super::{Flags, Term, NORMALIZED};
+use super::{Flags, Term};
 
 /// A function called in a mathematical expression, like `sqrt(x)`
 #[derive(Clone, Debug, PartialEq)]
@@ -17,6 +22,7 @@ pub struct Fun<T: Group> {
 }
 
 impl<T: Group> Fun<T> {
+    /// Create a new function expression
     pub fn new(ident: Symbol, args: Vec<Term<T>>, ring: &'static T) -> Self {
         Self {
             flags: 0,
@@ -36,16 +42,30 @@ impl<T: Group> Flags for Fun<T> {
     }
 }
 
-impl<T: Group> Display for Fun<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}(", Context::get_symbol_data(&self.ident).name)?;
+impl<T: Group> Print for Fun<T> {
+    fn print(&self, options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Self::fg::<Cyan>(
+            Context::get_symbol_data(&self.ident).name.as_str(),
+            options,
+            f,
+        )?;
+        Self::group_delim("(", options, f)?;
         for (i, term) in self.args.iter().enumerate() {
+            write!(f, "{}", term)?;
             if i != self.args.len() - 1 {
-                write!(f, "{}, ", term)?;
-            } else {
-                write!(f, "{}", term)?;
+                Self::delimiter(", ", options, f)?;
             }
         }
-        write!(f, ")")
+        Self::group_delim(")", options, f)
+    }
+
+    fn pretty_print(&self, options: &PrintOptions) -> crate::printer::PrettyPrinter {
+        todo!()
+    }
+}
+
+impl<T: Group> Display for Fun<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Print::fmt(self, &PrintOptions::default(), f)
     }
 }

@@ -1,4 +1,6 @@
-use crate::field::{Field, Group, Ring};
+//! Constant value expression.
+
+use crate::{field::Group, printer::Print};
 
 use super::{Flags, NORMALIZED};
 
@@ -11,6 +13,7 @@ pub struct Value<T: Group> {
 }
 
 impl<T: Group> Value<T> {
+    /// Create a new `Value` from an element of the set T
     pub fn new(value: T::Element, ring: &'static T) -> Self {
         Self {
             flags: NORMALIZED,
@@ -18,6 +21,7 @@ impl<T: Group> Value<T> {
             ring,
         }
     }
+    /// Get the inner constant
     pub fn get_value(self) -> T::Element {
         self.value
     }
@@ -29,5 +33,19 @@ impl<T: Group> Flags for Value<T> {
     }
     fn get_flags_mut(&mut self) -> &mut u8 {
         &mut self.flags
+    }
+}
+
+impl<T: Group> Print for Value<T> {
+    fn print(
+        &self,
+        _options: &crate::printer::PrintOptions,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        write!(f, "{}", self.value)
+    }
+
+    fn pretty_print(&self, options: &crate::printer::PrintOptions) -> crate::printer::PrettyPrinter {
+        todo!()
     }
 }
