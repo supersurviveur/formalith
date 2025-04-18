@@ -1,6 +1,11 @@
+//! Sum expression.
+
 use std::fmt::Display;
 
-use crate::field::{Field, Group, Ring};
+use crate::{
+    field::Group,
+    printer::{PrettyPrinter, Print, PrintOptions},
+};
 
 use super::{Flags, Term};
 
@@ -22,6 +27,7 @@ impl<T: Group> Flags for Add<T> {
 }
 
 impl<T: Group> Add<T> {
+    /// Create an empty sum expression.
     pub fn new(terms: Vec<Term<T>>, ring: &'static T) -> Self {
         Self {
             flags: 0,
@@ -46,21 +52,43 @@ impl<T: Group> Add<T> {
         self.set_normalized(false);
         self.terms.push(value);
     }
-    // Return an iterator over the sum terms
+    /// Return an iterator over the sum terms
     pub fn iter(&self) -> std::slice::Iter<'_, Term<T>> {
         self.terms.iter()
     }
 }
 
-impl<T: Group> Display for Add<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<T: Group> Print for Add<T> {
+    fn print(
+        &self,
+        options: &crate::printer::PrintOptions,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
         for (i, term) in self.terms.iter().enumerate() {
+            Print::print(term, options, f)?;
             if i != self.len() - 1 {
-                write!(f, "{}+", term)?;
-            } else {
-                write!(f, "{}", term)?;
+                Self::operator("+", options, f)?;
             }
         }
         Ok(())
+    }
+
+    fn pretty_print(&self, options: &PrintOptions) -> crate::printer::PrettyPrinter {
+        let mut res: Option<PrettyPrinter> = None;
+        for term in self.terms.iter() {
+            let elem = Print::pretty_print(term, options);
+            if let Some(res) = &mut res {
+                res.concat("+", &elem);
+            } else {
+                res = Some(elem);
+            }
+        }
+        res.unwrap()
+    }
+}
+
+impl<T: Group> Display for Add<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Print::fmt(self, &PrintOptions::default(), f)
     }
 }

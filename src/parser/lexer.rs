@@ -1,48 +1,76 @@
+//! Lexer part of the parser.
+
 use std::{fmt::Display, str::Chars};
 
+/// A token produced by the lexer.
 #[derive(Debug, Clone)]
 pub struct Token {
+    /// Its kind
     pub kind: TokenKind,
+    /// Its character's length,
     pub len: usize,
 }
 
 impl Token {
+    /// Create a new token
     pub fn new(kind: TokenKind, len: usize) -> Token {
         Token { kind, len }
     }
 }
 
+/// Describe the type of the token.
 #[derive(Debug, PartialEq, Clone)]
 pub enum TokenKind {
+    /// A space
     Whitespace,
 
+    /// (
     OpenParen,
+    /// )
     CloseParen,
+    /// [
     OpenBracket,
+    /// ]
     CloseBracket,
-
+    /// An identifier
     Ident(String),
 
     // Eq,
     // EqEq,
     // Bang,
+    /// +
     Plus,
+    /// -
     Minus,
+    /// *
     Star,
+    /// /
     Slash,
+    /// ^
     Caret,
 
-    Literral { kind: LiterralTokenKind },
+    /// A literal, which can be of any kind in [LiteralTokenKind]
+    Literal {
+        /// Its kind
+        kind: LiteralTokenKind,
+    },
 
+    /// ,
     Comma,
+    /// End Of File
     Eof,
+    /// Unknown character
     Unknown,
 }
 
+/// Describe the type of a literal
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum LiterralTokenKind {
+pub enum LiteralTokenKind {
+    /// An integer
     Int,
+    /// A float number
     Float,
+    /// A boolean
     Bool,
 }
 
@@ -141,12 +169,12 @@ impl Lexer<'_> {
             while self.peek_char().is_digit(10) && !self.eof() {
                 self.chars.next();
             }
-            TokenKind::Literral {
-                kind: LiterralTokenKind::Float,
+            TokenKind::Literal {
+                kind: LiteralTokenKind::Float,
             }
         } else {
-            TokenKind::Literral {
-                kind: LiterralTokenKind::Int,
+            TokenKind::Literal {
+                kind: LiteralTokenKind::Int,
             }
         }
     }
@@ -156,8 +184,8 @@ impl Lexer<'_> {
         }
         let ident = &self.input[self.pos..self.current_pos()];
         match ident {
-            "true" | "false" => TokenKind::Literral {
-                kind: LiterralTokenKind::Bool,
+            "true" | "false" => TokenKind::Literal {
+                kind: LiteralTokenKind::Bool,
             },
             _ => TokenKind::Ident(ident.to_string()),
         }

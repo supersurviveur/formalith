@@ -1,4 +1,6 @@
-use crate::symbol;
+//! Contexts and symbols implementation.
+//! Context are used to store a hashmap linking a variable name to its unique identifier. A same variable can have multiple names.
+
 use std::{
     collections::HashMap,
     sync::{LazyLock, RwLock},
@@ -71,6 +73,7 @@ macro_rules! symbol {
 /// Stores data associated with a symbol.
 #[derive(Clone, Debug)]
 pub struct SymbolData {
+    /// The symbol visual representation
     pub name: String,
 }
 
@@ -80,9 +83,10 @@ pub struct Context {
 }
 
 impl Context {
+    /// Absolute function
     pub const ABS: Symbol = Symbol(0);
 
-    pub const BUILTIN_NAMES: [&'static str; 1] = ["abs"];
+    const BUILTIN_NAMES: [&'static str; 1] = ["abs"];
 
     /// Create a new empty context
     pub fn new() -> Self {
@@ -97,7 +101,7 @@ impl Context {
 
     /// Returns a reference to the global static context, used by default
     pub(crate) fn get_global_context() -> &'static RwLock<Self> {
-        &*GLOBAL_CONTEXT
+        &GLOBAL_CONTEXT
     }
 
     /// Return a [Symbol] from its name in a context

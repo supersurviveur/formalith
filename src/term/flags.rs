@@ -1,7 +1,9 @@
-/// Flags marking a [Term] as already normalized
+//! Trait to set and unset flags on expression.
+
+/// Flag marking a [Term] as already normalized
 pub(crate) const NORMALIZED: u8 = 0x1;
 
-/// Util trait to manage expression's flags
+/// Utility trait to manage expression's flags
 pub(crate) trait Flags {
     /// Return the flags of the expression
     fn get_flags(&self) -> u8;

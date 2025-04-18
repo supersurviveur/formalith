@@ -1,8 +1,13 @@
+//! Power expression.
+
 use std::{fmt::Display, mem::ManuallyDrop};
 
-use crate::field::{Field, Group, Ring, Z};
+use crate::{
+    field::Group,
+    printer::{Print, PrintOptions},
+};
 
-use super::{Flags, Term, Value};
+use super::{Flags, Term};
 
 /// A product of expressions.
 #[derive(Clone, Debug, PartialEq)]
@@ -24,6 +29,7 @@ impl<T: Group> Flags for Pow<T> {
 }
 
 impl<T: Group> Pow<T> {
+    /// Create a new pow expression
     pub fn new<E: Into<Box<Term<T>>>, F: Into<Box<Term<T::ExposantSet>>>>(
         base: E,
         exposant: F,
@@ -46,27 +52,20 @@ impl<T: Group> Drop for Pow<T> {
     }
 }
 
+impl<T: Group> Print for Pow<T> {
+    fn print(&self, options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Self::group(&self.base, options, f)?;
+        Self::operator("^", options, f)?;
+        Self::group(&**self.exposant, options, f)?;
+        Ok(())
+    }
+
+    fn pretty_print(&self, options: &PrintOptions) -> crate::printer::PrettyPrinter {
+        todo!()
+    }
+}
 impl<T: Group> Display for Pow<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let need_paren = match *self.base {
-            Term::Value(_) | Term::Symbol(_) | Term::Fun(_) => false,
-            Term::Mul(_) | Term::Add(_) | Term::Pow(_) => true,
-        };
-        if need_paren {
-            write!(f, "({})", self.base)?;
-        } else {
-            write!(f, "{}", self.base)?;
-        }
-        write!(f, "^")?;
-        let need_paren = match **self.exposant {
-            Term::Value(_) | Term::Symbol(_) | Term::Fun(_) => false,
-            Term::Mul(_) | Term::Add(_) | Term::Pow(_) => true,
-        };
-        if need_paren {
-            write!(f, "({})", *self.exposant)?;
-        } else {
-            write!(f, "{}", *self.exposant)?;
-        }
-        Ok(())
+        Print::fmt(self, &PrintOptions::default(), f)
     }
 }

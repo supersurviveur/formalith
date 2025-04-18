@@ -1,3 +1,5 @@
+//! Sets specificities implementation.
+
 use std::{cmp::Ordering, fmt};
 
 use crate::{
@@ -17,9 +19,11 @@ pub trait Group: Clone + fmt::Debug + PartialEq + 'static {
     /// The type of the elements living in this group
     type Element: Clone + fmt::Debug + fmt::Display + PartialEq + PartialOrd;
 
-    /// TODO
+    /// The set where exposants live. Mostly [commons::Z], but it can be any ring,
+    /// like [const@R] for real numbers since power is not only a notation for `x*x*...*x` but a defined operation.
     type ExposantSet: Ring;
 
+    /// Get the exposant set for this group
     fn get_exposant_set(&self) -> &Self::ExposantSet;
 
     /// Get the zero (aka identity element for `+`) of this group
@@ -53,6 +57,7 @@ pub trait Group: Clone + fmt::Debug + PartialEq + 'static {
     /// Parses a string to an element of this group
     fn parse_litteral(&self, value: &str) -> Result<Self::Element, String>;
 
+    /// Custom parsing function, to parse element specific to this group. Check [commons::M::parse_expression] for example.
     fn parse_expression(
         &'static self,
         _parser: &mut Parser,
@@ -60,6 +65,7 @@ pub trait Group: Clone + fmt::Debug + PartialEq + 'static {
         Ok(None)
     }
 
+    /// Normalize a mathematical expression using rules specific to this group. Check [commons::R::normalize]
     fn normalize(&'static self, a: Term<Self>) -> Term<Self> {
         a
     }
@@ -89,12 +95,15 @@ pub trait Ring: Group {
     fn mul_assign(&self, a: &mut Self::Element, b: &Self::Element) {
         *a = self.mul(a, b);
     }
+    /// Try computing the inverse element of a, returning `None` if it doesn't exist.
     fn inv(&self, a: &Self::Element) -> Option<Self::Element>;
 }
 
 /// A field is a [Ring] TODO
 pub trait Field: Ring {}
 
+/// TODO
 pub trait Derivable: Ring {
+    /// TODO rework derivative system
     fn derivative(&self, expr: &Self::Element, x: Symbol) -> Self::Element;
 }

@@ -1,3 +1,6 @@
+//! Most commons groups, rings and fields like [R], [C] or [M].
+//! These are currently only implemented using malachite arbitrary precision numbers.
+
 use malachite::base::num::arithmetic;
 use malachite::base::num::arithmetic::traits::CheckedRoot;
 use malachite::base::num::arithmetic::traits::Parity;
@@ -27,6 +30,7 @@ use crate::{
 
 use super::{Derivable, Field, Group, Ring};
 
+/// The integer ring
 #[derive(Clone, Debug, PartialEq)]
 pub struct Z<T> {
     phantom: PhantomData<T>,
@@ -79,14 +83,22 @@ impl Ring for Z<Integer> {
     }
 
     fn inv(&self, a: &Self::Element) -> Option<Self::Element> {
-        todo!()
+        if *a == 1 {
+            Some(Integer::const_from_unsigned(1))
+        } else if *a == -1 {
+            Some(Integer::const_from_signed(-1))
+        } else {
+            None
+        }
     }
 }
 
+/// The integer ring, using [malachite::Integer] as constant to get arbitrary precision integers.
 pub const Z: &Z<Integer> = &Z {
     phantom: PhantomData,
 };
 
+/// The real field.
 #[derive(Clone, Debug, PartialEq)]
 pub struct R<T> {
     phantom: PhantomData<T>,
@@ -233,7 +245,7 @@ impl Ring for R<Rational> {
     }
 
     fn inv(&self, a: &Self::Element) -> Option<Self::Element> {
-        todo!()
+        Some(a.pow(-1_i64))
     }
 
     fn is_one(&self, a: &Self::Element) -> bool {
@@ -253,13 +265,17 @@ impl Derivable for R<Rational> {
     }
 }
 
+/// The real field, using [malachite::Rational] as constants to get arbitrary precision numbers.
 pub const R: &R<Rational> = &R {
     phantom: PhantomData,
 };
 
+/// An enum representing elements inside a vector space.
 #[derive(Debug, Clone, PartialEq)]
 pub enum VectorSpaceElement<T: Group, Vector> {
+    /// A scalar element living in [T]
     Scalar(T::Element),
+    /// A vector living in the vector space
     Vector(Vector),
 }
 
@@ -284,6 +300,7 @@ impl<T: Group, Vector: Display> Display for VectorSpaceElement<T, Vector> {
     }
 }
 
+/// The matrix field.
 #[derive(Debug, Clone, PartialEq)]
 pub struct M<T: Group> {
     scalar_sub_set: &'static T,
@@ -304,15 +321,31 @@ impl<T: Ring> Group for M<T> {
     }
 
     fn add(&self, a: &Self::Element, b: &Self::Element) -> Self::Element {
-        todo!()
+        match (a, b) {
+            (VectorSpaceElement::Scalar(a), VectorSpaceElement::Scalar(b)) => {
+                VectorSpaceElement::Scalar(self.scalar_sub_set.add(a, b))
+            }
+            (VectorSpaceElement::Vector(a), VectorSpaceElement::Vector(b)) => {
+                VectorSpaceElement::Vector(a + b)
+            }
+            _ => panic!("Can't add a scalar and a vector ! ({} + {})", a, b),
+        }
     }
 
     fn neg(&self, a: &Self::Element) -> Self::Element {
-        todo!()
+        match a {
+            VectorSpaceElement::Scalar(a) => VectorSpaceElement::Scalar(self.scalar_sub_set.neg(a)),
+            VectorSpaceElement::Vector(a) => VectorSpaceElement::Vector(-a),
+        }
     }
 
     fn partial_cmp(&self, a: &Self::Element, b: &Self::Element) -> Option<Ordering> {
-        todo!()
+        match (a, b) {
+            (VectorSpaceElement::Scalar(a), VectorSpaceElement::Scalar(b)) => {
+                self.scalar_sub_set.partial_cmp(a, b)
+            }
+            _ => None,
+        }
     }
 
     fn normalize(&'static self, a: Term<Self>) -> Term<Self> {
@@ -408,6 +441,7 @@ impl<T: Ring> Ring for M<T> {
     }
 }
 
+/// The matrix field, with real coefficients. See [R]
 pub const M: &M<R<Rational>> = &M {
     scalar_sub_set: R,
     term_sub_set: &TermField::new(R),

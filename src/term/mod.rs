@@ -1,8 +1,12 @@
+//! Mathematical expression implementation. An expression is represented as a [Term], which can be of many types.
+//! A term lives in a specific set, which can be a group, a ring, a field... Standard operations are defined between terms in [term_op].
+
 use std::{borrow::BorrowMut, cmp::Ordering, fmt::Display};
 
 use crate::{
     context::{Context, Symbol},
     field::{Group, Ring},
+    printer::{PrettyPrinter, Print, PrintOptions},
 };
 
 pub mod term_op;
@@ -26,13 +30,20 @@ use flags::*;
 /// A mathematical expression.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Term<T: Group> {
+    /// See [Value]
     Value(Value<T>),
+    /// See [SymbolTerm]
     Symbol(SymbolTerm<T>),
+    /// See [Add]
     Add(Add<T>),
+    /// See [Mul]
     Mul(Mul<T>),
+    /// See [Pow]
     Pow(Pow<T>),
+    /// See [Fun]
     Fun(Fun<T>),
 }
+
 // #[derive(Clone, Debug, PartialEq)]
 // pub struct MultivariatePolynomial<T: Ring, U: Ring = T> {
 //     terms: Vec<(Vec<(Symbol, U::Element)>, T::Element)>,
@@ -105,6 +116,7 @@ impl<T: Group> From<Pow<T>> for Term<T> {
 }
 
 impl<T: Group> Term<T> {
+    /// Absolute function
     pub const ABS: Symbol = Context::ABS;
 
     /// Create a new empty product expression
@@ -664,9 +676,11 @@ impl<T: Ring> Term<T> {
         res.set_normalized(true);
         res
     }
+    /// Invert the expression
     pub fn inv(&self) -> Self {
         self.one() / self
     }
+    /// Return the constant 1
     pub fn one(&self) -> Self {
         Term::Value(Value::new(self.get_set().one(), self.get_set()))
     }
@@ -731,13 +745,28 @@ impl<T: Ring> Term<T> {
 
 impl<T: Group> Display for Term<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Print::fmt(self, &PrintOptions::default(), f)
+    }
+}
+impl<T: Group> Print for Term<T> {
+    fn print(&self, options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Term::Value(value) => write!(f, "{}", value.value),
-            Term::Symbol(symbol) => write!(f, "{}", symbol),
-            Term::Add(add) => write!(f, "{}", add),
-            Term::Mul(mul) => write!(f, "{}", mul),
-            Term::Pow(pow) => write!(f, "{}", pow),
-            Term::Fun(fun) => write!(f, "{}", fun),
+            Term::Value(value) => Print::print(value, options, f),
+            Term::Symbol(symbol) => Print::print(symbol, options, f),
+            Term::Add(add) => Print::print(add, options, f),
+            Term::Mul(mul) => Print::print(mul, options, f),
+            Term::Pow(pow) => Print::print(pow, options, f),
+            Term::Fun(fun) => Print::print(fun, options, f),
+        }
+    }
+    fn pretty_print(&self, options: &PrintOptions) -> PrettyPrinter {
+        match self {
+            Term::Value(value) => Print::pretty_print(value, options),
+            Term::Symbol(symbol) => Print::pretty_print(symbol, options),
+            Term::Add(add) => Print::pretty_print(add, options),
+            Term::Mul(mul) => Print::pretty_print(mul, options),
+            Term::Pow(pow) => Print::pretty_print(pow, options),
+            Term::Fun(fun) => Print::pretty_print(fun, options),
         }
     }
 }
