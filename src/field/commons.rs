@@ -21,6 +21,8 @@ use crate::matrix::Matrix;
 use crate::parser::lexer::TokenKind;
 use crate::parser::parser::Parser;
 use crate::parser::parser::ParserError;
+use crate::printer::PrettyPrinter;
+use crate::printer::Print;
 use crate::term;
 use crate::term::TermField;
 use crate::{
@@ -67,6 +69,14 @@ impl Group for Z<Integer> {
             value
         ))
     }
+
+    fn pretty_print(
+        &self,
+        elem: &Self::Element,
+        options: &crate::printer::PrintOptions,
+    ) -> crate::printer::PrettyPrinter {
+        todo!()
+    }
 }
 
 impl Ring for Z<Integer> {
@@ -82,7 +92,7 @@ impl Ring for Z<Integer> {
         Integer::const_from_signed(nth)
     }
 
-    fn inv(&self, a: &Self::Element) -> Option<Self::Element> {
+    fn try_inv(&self, a: &Self::Element) -> Option<Self::Element> {
         if *a == 1 {
             Some(Integer::const_from_unsigned(1))
         } else if *a == -1 {
@@ -229,6 +239,26 @@ impl Group for R<malachite::rational::Rational> {
             _ => a,
         }
     }
+
+    fn pretty_print(
+        &self,
+        elem: &Self::Element,
+        _options: &crate::printer::PrintOptions,
+    ) -> crate::printer::PrettyPrinter {
+        let (num, den) = elem.numerator_and_denominator_ref();
+        let mut num = PrettyPrinter::from(if elem.sign() == Ordering::Less {
+            format!("-{}", num)
+        } else {
+            format!("{}", num)
+        });
+        if *den == 1 {
+            num
+        } else {
+            let den = PrettyPrinter::from(format!("{}", den));
+            num.vertical_concat("─", &den);
+            num
+        }
+    }
 }
 
 impl Ring for R<Rational> {
@@ -244,7 +274,7 @@ impl Ring for R<Rational> {
         Rational::const_from_signed(nth)
     }
 
-    fn inv(&self, a: &Self::Element) -> Option<Self::Element> {
+    fn try_inv(&self, a: &Self::Element) -> Option<Self::Element> {
         Some(a.pow(-1_i64))
     }
 
@@ -421,6 +451,17 @@ impl<T: Ring> Group for M<T> {
             _ => Ok(None),
         }
     }
+
+    fn pretty_print(
+        &self,
+        elem: &Self::Element,
+        options: &crate::printer::PrintOptions,
+    ) -> crate::printer::PrettyPrinter {
+        match elem {
+            VectorSpaceElement::Scalar(scalar) => self.scalar_sub_set.pretty_print(scalar, options),
+            VectorSpaceElement::Vector(matrix) => matrix.pretty_print(options),
+        }
+    }
 }
 
 impl<T: Ring> Ring for M<T> {
@@ -436,7 +477,7 @@ impl<T: Ring> Ring for M<T> {
         todo!()
     }
 
-    fn inv(&self, a: &Self::Element) -> Option<Self::Element> {
+    fn try_inv(&self, a: &Self::Element) -> Option<Self::Element> {
         todo!()
     }
 }

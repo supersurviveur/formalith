@@ -1,10 +1,13 @@
 //! Matrix implementation.
 
-use std::fmt::Display;
+use std::{
+    fmt::Display,
+    ops::{Index, IndexMut},
+};
 
 use crate::{
-    field::{Group, Ring},
-    printer::{Print, PrintOptions},
+    field::{Field, Group, Ring},
+    printer::{PrettyPrinter, Print, PrintOptions},
 };
 
 /// A matrix with coefficients living in `T`.
@@ -15,10 +18,50 @@ pub struct Matrix<T: Group> {
     ring: &'static T,
 }
 
+/// An error thrown by a matrix method.
+#[derive(Debug)]
+pub enum MatrixError {
+    /// The matrix is not a square matrix.
+    NotSquare,
+}
+
+type MatrixResult<T> = Result<T, MatrixError>;
+
 impl<T: Group> Matrix<T> {
     /// Create a new matrix
     pub fn new(size: (usize, usize), data: Vec<T::Element>, ring: &'static T) -> Self {
         Self { size, data, ring }
+    }
+    /// Create a new matrix filled with zeros.
+    pub fn zero(size: (usize, usize), ring: &'static T) -> Self {
+        Self::new(size, vec![ring.zero(); size.0 * size.1], ring)
+    }
+
+    /// Get the size of the matrix (height * width)
+    pub fn size(&self) -> usize {
+        self.width() * self.height()
+    }
+
+    /// Get the width of the matrix.
+    #[must_use]
+    pub fn width(&self) -> usize {
+        self.size.1
+    }
+
+    /// Get the height of the matrix.
+    #[must_use]
+    pub fn height(&self) -> usize {
+        self.size.0
+    }
+
+    /// Swap two rows in the matrix.
+    pub fn swap_rows(&mut self, row1: usize, row2: usize) {
+        let cols = self.size.1;
+        let start1 = row1 * cols;
+        let start2 = row2 * cols;
+        for i in 0..cols {
+            self.data.swap(start1 + i, start2 + i);
+        }
     }
 }
 
@@ -101,7 +144,54 @@ impl<T: Group> Print for Matrix<T> {
     }
 
     fn pretty_print(&self, options: &PrintOptions) -> crate::printer::PrettyPrinter {
-        todo!()
+        let mut coeffs: Vec<_> = self
+            .data
+            .iter()
+            .map(|x| self.ring.pretty_print(x, options))
+            .collect();
+        let mut lines_height = vec![0; self.size.0];
+        let mut lines_baselines = vec![0; self.size.0];
+        let mut columns_width = vec![0; self.size.1];
+        for line in 0..self.size.0 {
+            lines_height[line] = coeffs[line * self.size.1..(line + 1) * self.size.1]
+                .iter()
+                .max_by_key(|x| x.height())
+                .unwrap()
+                .height();
+            lines_baselines[line] = coeffs[line * self.size.1..(line + 1) * self.size.1]
+                .iter()
+                .max_by_key(|x| x.baseline)
+                .unwrap()
+                .baseline;
+        }
+        for column in 0..self.size.1 {
+            columns_width[column] = coeffs[column..self.size()]
+                .iter()
+                .step_by(self.size.1)
+                .max_by_key(|x| x.width())
+                .unwrap()
+                .width();
+        }
+        for x in 0..self.height() {
+            for y in 0..self.width() {
+                coeffs[x * self.width() + y].center(
+                    lines_height[x],
+                    columns_width[y],
+                    lines_baselines[x],
+                );
+            }
+        }
+        let mut res = PrettyPrinter::empty();
+        for i in 0..self.size.1 {
+            let mut column = PrettyPrinter::empty();
+            for coeff in coeffs[i..self.size()].iter().step_by(self.size.1) {
+                column.vertical_concat(" ", coeff);
+            }
+            res.concat("", true, &column);
+        }
+        res.group('[', ']');
+        res.baseline = res.height() / 2;
+        res
     }
 }
 
@@ -111,20 +201,67 @@ impl<T: Group> Display for Matrix<T> {
     }
 }
 
+impl<T: Field> Matrix<T> {
+    /// Transform the matrix in place in row reduced echelon form.
+    pub fn row_reduce(&mut self) {
+        self.partial_row_reduce();
+        self.back_substitution();
+    }
+    /// Transform a matrix in row $echelon form to a matrix in row reduced echelon form.
+    pub fn back_substitution(&mut self) {
+        for line in (0..self.height()).rev() {
+            // Find the pivot
+            if let Some(pivot) = (0..self.width()).find(|x| !self.ring.is_zero(&self[(line, *x)])) {
+                if !self.ring.is_one(&self[(line, pivot)]) {
+                    self.scale_row(line, &self.ring.inv(&self[(line, pivot)]));
+                }
+                // Remove coefficients under the pivot
+                for i in 0..line {
+                    self.row_add(i, line, &self.ring.neg(&self[(i, pivot)]));
+                    // Coefficient under the pivot became zero, force the value to avoid complex expression
+                    self[(i, pivot)] = self.ring.zero();
+                }
+            }
+        }
+    }
+
+    /// Compute the inverse of the matrix if possible.
+    pub fn inv(&self) -> MatrixResult<Self> {
+        if self.width() != self.height() {
+            return Err(MatrixError::NotSquare);
+        }
+        let mut augmented = Matrix::zero((self.size.0, self.size.1 * 2), self.ring);
+        for line in 0..self.height() {
+            for column in 0..self.width() {
+                augmented[(line, column)] = self[(line, column)].clone();
+            }
+            augmented[(line, line + self.width())] = self.ring.one();
+        }
+        augmented.row_reduce();
+
+        for line in 0..self.height() {
+            for column in 0..self.width() {
+                augmented[line * self.width() + column] =
+                    augmented[(line, column + self.width())].clone();
+            }
+        }
+        augmented.size = self.size;
+        Ok(augmented)
+    }
+}
+
 impl<T: Ring> Matrix<T> {
-    /// Réalise l'élimination de Gauss pour mettre la matrice sous forme échelonnée
-    pub fn gaussian_elimination(&mut self) {
-        let mut det = self.ring.one();
+    /// Transforn the matrix in place in row echelon form, returning its rank.
+    pub fn partial_row_reduce(&mut self) -> usize {
         let (rows, cols) = self.size;
         let mut pivot_row = 0;
 
-        // Parcours des colonnes pivots
         for pivot_col in 0..cols {
             if pivot_row >= rows {
                 break;
             }
 
-            // Trouver le pivot non nul
+            // Find a non-null pivot
             let pivot = match (pivot_row..rows)
                 .find(|&i| !self.ring.is_zero(&self.data[i * cols + pivot_col]))
             {
@@ -132,46 +269,64 @@ impl<T: Ring> Matrix<T> {
                 None => continue,
             };
 
-            // Échanger les lignes si nécessaire
             if pivot != pivot_row {
-                det = self.ring.inv(&det).unwrap();
                 self.swap_rows(pivot_row, pivot);
             }
 
-            // Normaliser la ligne pivot
-            let pivot_val = self.data[pivot_row * cols + pivot_col].clone();
-            let inv_pivot = self.ring.inv(&pivot_val).expect("Element non inversible");
-            self.ring.mul_assign(&mut det, &pivot_val);
-            self.scale_row(pivot_row, &inv_pivot);
-
-            // Élimination des éléments sous le pivot
+            // Remove coefficient under the pivot
             for row in (pivot_row + 1)..rows {
                 let factor = self.data[row * cols + pivot_col].clone();
+
                 if !self.ring.is_zero(&factor) {
-                    let neg_factor = self.ring.neg(&factor);
-                    self.row_add(row, pivot_row, &neg_factor);
+                    let pivot_val = self.data[pivot_row * cols + pivot_col].clone();
+                    let ratio = self
+                        .ring
+                        .mul(&factor, &self.ring.try_inv(&pivot_val).unwrap());
+                    let neg_ratio = self.ring.neg(&ratio);
+                    self.row_add(row, pivot_row, &neg_ratio);
                 }
+                // Coefficient under the pivot became zero, force the value to avoid complex expression
+                self.data[row * cols + pivot_col] = self.ring.zero();
             }
 
             pivot_row += 1;
         }
-        println!("det: {}", det);
+        pivot_row
     }
 
-    // Méthodes auxiliaires
-
-    /// Échange deux lignes de la matrice
-    fn swap_rows(&mut self, row1: usize, row2: usize) {
-        let cols = self.size.1;
-        let start1 = row1 * cols;
-        let start2 = row2 * cols;
-        for i in 0..cols {
-            self.data.swap(start1 + i, start2 + i);
+    /// Compute the determinant of the matrix.
+    pub fn det(&self) -> MatrixResult<T::Element> {
+        if self.height() != self.width() {
+            return Err(MatrixError::NotSquare);
+        }
+        match self.height() {
+            0 => unreachable!(),
+            1 => Ok(self.data[0].clone()),
+            2 => Ok(self.ring.sub(
+                &self.ring.mul(&self.data[0], &self.data[3]),
+                &self.ring.mul(&self.data[1], &self.data[2]),
+            )),
+            _ => self.clone().det_in_place(),
         }
     }
+    /// Compute the determinant of the matrix in place. Matrix will be in partially reduced form then.
+    pub fn det_in_place(&mut self) -> MatrixResult<T::Element> {
+        if self.height() != self.width() {
+            return Err(MatrixError::NotSquare);
+        }
 
-    /// Multiplie une ligne par un scalaire
-    fn scale_row(&mut self, row: usize, factor: &T::Element) {
+        // TODO det sign
+        self.partial_row_reduce();
+        let mut det = self.ring.one();
+        for line in 0..self.width() {
+            self.ring
+                .mul_assign(&mut det, &self.data[line * self.width() + line]);
+        }
+        Ok(det)
+    }
+
+    /// Scale a row by a factor.
+    pub fn scale_row(&mut self, row: usize, factor: &T::Element) {
         let cols = self.size.1;
         for col in 0..cols {
             let index = row * cols + col;
@@ -179,8 +334,8 @@ impl<T: Ring> Matrix<T> {
         }
     }
 
-    /// Ajoute à une ligne un multiple d'une autre ligne
-    fn row_add(&mut self, target_row: usize, source_row: usize, factor: &T::Element) {
+    /// Add a row multiplied by a factor to another.
+    pub fn row_add(&mut self, target_row: usize, source_row: usize, factor: &T::Element) {
         let cols = self.size.1;
         for col in 0..cols {
             let src_idx = source_row * cols + col;
@@ -188,5 +343,40 @@ impl<T: Ring> Matrix<T> {
             let term = self.ring.mul(&self.data[src_idx], factor);
             self.data[tgt_idx] = self.ring.add(&self.data[tgt_idx], &term);
         }
+    }
+}
+
+impl<T: Ring> Index<usize> for Matrix<T> {
+    type Output = T::Element;
+
+    #[inline]
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.data[index]
+    }
+}
+
+impl<T: Ring> IndexMut<usize> for Matrix<T> {
+    #[inline]
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.data[index]
+    }
+}
+
+impl<T: Ring> Index<(usize, usize)> for Matrix<T> {
+    type Output = T::Element;
+
+    /// Get the `i`th row and `j`th column of the matrix, where `index=(i,j)`.
+    #[inline]
+    fn index(&self, index: (usize, usize)) -> &Self::Output {
+        &self.data[index.0 * self.width() + index.1]
+    }
+}
+
+impl<T: Ring> IndexMut<(usize, usize)> for Matrix<T> {
+    /// Get the `i`th row and `j`th column of the matrix, where `index=(i,j)`.
+    #[inline]
+    fn index_mut(&mut self, index: (usize, usize)) -> &mut Self::Output {
+        let width = self.width();
+        &mut self.data[index.0 * width + index.1]
     }
 }

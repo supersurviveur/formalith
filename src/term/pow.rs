@@ -61,7 +61,16 @@ impl<T: Group> Print for Pow<T> {
     }
 
     fn pretty_print(&self, options: &PrintOptions) -> crate::printer::PrettyPrinter {
-        todo!()
+        let mut base = self.base.pretty_print(options);
+        let exposant = self.exposant.pretty_print(options);
+        if match *self.base {
+            Term::Mul(_) | Term::Add(_) => true,
+            _ => false,
+        } {
+            base.paren();
+        }
+        base.pow(&exposant);
+        base
     }
 }
 impl<T: Group> Display for Pow<T> {

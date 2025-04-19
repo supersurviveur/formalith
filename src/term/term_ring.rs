@@ -2,7 +2,10 @@
 
 use std::cmp::Ordering;
 
-use crate::field::{Field, Group, Ring};
+use crate::{
+    field::{Field, Group, Ring},
+    printer::Print,
+};
 
 use super::{Term, Value};
 
@@ -52,6 +55,14 @@ impl<T: Ring> Group for TermField<T> {
             self.get_set(),
         )))
     }
+
+    fn pretty_print(
+        &self,
+        elem: &Self::Element,
+        options: &crate::printer::PrintOptions,
+    ) -> crate::printer::PrettyPrinter {
+        elem.pretty_print(options)
+    }
 }
 impl<T: Ring> Ring for TermField<T> {
     fn one(&self) -> Self::Element {
@@ -66,7 +77,7 @@ impl<T: Ring> Ring for TermField<T> {
         Term::Value(Value::new(self.get_set().nth(nth), self.get_set()))
     }
 
-    fn inv(&self, a: &Self::Element) -> Option<Self::Element> {
+    fn try_inv(&self, a: &Self::Element) -> Option<Self::Element> {
         Some(a.inv())
     }
 }

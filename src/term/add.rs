@@ -78,7 +78,7 @@ impl<T: Group> Print for Add<T> {
         for term in self.terms.iter() {
             let elem = Print::pretty_print(term, options);
             if let Some(res) = &mut res {
-                res.concat("+", &elem);
+                res.concat("+", true, &elem);
             } else {
                 res = Some(elem);
             }

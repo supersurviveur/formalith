@@ -1,6 +1,9 @@
 //! Constant value expression.
 
-use crate::{field::Group, printer::Print};
+use crate::{
+    field::Group,
+    printer::Print,
+};
 
 use super::{Flags, NORMALIZED};
 
@@ -45,7 +48,10 @@ impl<T: Group> Print for Value<T> {
         write!(f, "{}", self.value)
     }
 
-    fn pretty_print(&self, options: &crate::printer::PrintOptions) -> crate::printer::PrettyPrinter {
-        todo!()
+    fn pretty_print(
+        &self,
+        options: &crate::printer::PrintOptions,
+    ) -> crate::printer::PrettyPrinter {
+        self.ring.pretty_print(&self.value, options)
     }
 }

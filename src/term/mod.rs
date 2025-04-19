@@ -478,6 +478,11 @@ impl<T: Ring> Term<T> {
         }
     }
 
+    /// Return the zero constant expression
+    pub fn zero(set: &'static T) -> Self {
+        Term::Value(Value::new(set.zero(), set))
+    }
+
     /// Check if the term is zero
     /// ```
     /// use formalith::{field::C, parse, symbol};

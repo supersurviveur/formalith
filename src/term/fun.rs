@@ -2,12 +2,12 @@
 
 use std::fmt::Display;
 
-use owo_colors::colors::{Blue, Cyan};
+use owo_colors::colors::Cyan;
 
 use crate::{
     context::{Context, Symbol},
     field::Group,
-    printer::{Print, PrintOptions},
+    printer::{PrettyPrinter, Print, PrintOptions},
 };
 
 use super::{Flags, Term};
@@ -60,7 +60,28 @@ impl<T: Group> Print for Fun<T> {
     }
 
     fn pretty_print(&self, options: &PrintOptions) -> crate::printer::PrettyPrinter {
-        todo!()
+        match self.ident {
+            Context::ABS => {
+                let mut res = self.args.first().unwrap().pretty_print(options);
+                res.group('|', '|');
+                res
+            }
+            _ => {
+                let mut args = self.args.iter().map(|x| x.pretty_print(options));
+                let mut res = args.next().unwrap();
+                for mut arg in args {
+                    arg.left(' ');
+                    res.concat(",", false, &arg);
+                }
+                res.paren();
+                let mut fun = PrettyPrinter::from(format!(
+                    "{}",
+                    Context::get_symbol_data(&self.ident).name.as_str(),
+                ));
+                fun.concat("", false, &res);
+                fun
+            }
+        }
     }
 }
 

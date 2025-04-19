@@ -7,6 +7,7 @@ edition = "2024"
 append-only-vec = "0.1.7"
 malachite = { version = "0.5.1" }
 owo-colors = "4.2.0"
+phf = { version = "0.11.3", features = [ "macros" ] }
 supports-color = "3.0.2"
 
 # [profile.release]
