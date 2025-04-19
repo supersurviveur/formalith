@@ -5,6 +5,7 @@ use std::{cmp::Ordering, fmt};
 use crate::{
     context::Symbol,
     parser::parser::{Parser, ParserError},
+    printer::{PrettyPrinter, PrintOptions},
     term::Term,
 };
 
@@ -50,6 +51,14 @@ pub trait Group: Clone + fmt::Debug + PartialEq + 'static {
     fn neg_assign(&self, a: &mut Self::Element) {
         *a = self.neg(a);
     }
+    /// Substract two elements of this group.
+    fn sub(&self, a: &Self::Element, b: &Self::Element) -> Self::Element {
+        self.add(a, &self.neg(b))
+    }
+    /// Substract two elements of this group into the first one.
+    fn sub_assign(&self, a: &mut Self::Element, b: &Self::Element) {
+        *a = self.sub(a, b);
+    }
 
     /// Compares two elements of this group if possible, returns `None` otherwise
     fn partial_cmp(&self, a: &Self::Element, b: &Self::Element) -> Option<Ordering>;
@@ -64,6 +73,9 @@ pub trait Group: Clone + fmt::Debug + PartialEq + 'static {
     ) -> Result<Option<Term<Self>>, ParserError> {
         Ok(None)
     }
+
+    /// Pretty print an element of this set.
+    fn pretty_print(&self, elem: &Self::Element, options: &PrintOptions) -> PrettyPrinter;
 
     /// Normalize a mathematical expression using rules specific to this group. Check [commons::R::normalize]
     fn normalize(&'static self, a: Term<Self>) -> Term<Self> {
@@ -96,11 +108,17 @@ pub trait Ring: Group {
         *a = self.mul(a, b);
     }
     /// Try computing the inverse element of a, returning `None` if it doesn't exist.
-    fn inv(&self, a: &Self::Element) -> Option<Self::Element>;
+    fn try_inv(&self, a: &Self::Element) -> Option<Self::Element>;
 }
 
 /// A field is a [Ring] TODO
-pub trait Field: Ring {}
+pub trait Field: Ring {
+    /// Compute the inverse element of a.
+    fn inv(&self, a: &Self::Element) -> Self::Element {
+        self.try_inv(a)
+            .expect("Each elements should be inversible in a field !")
+    }
+}
 
 /// TODO
 pub trait Derivable: Ring {

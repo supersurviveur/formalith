@@ -1,24 +1,11 @@
 use formalith::{
     field::{VectorSpaceElement, M, R},
-    parse, symbol,
+    parse,
 };
 
 pub fn main() {
-    let test = parse!("x + 5 * y + (y+z) *3.55", R);
-    println!("{}", test.expand());
-    let a = parse!("1", R);
-    let b = parse!("3", R);
-    let c = parse!("6", R);
-    let d = symbol!("x", R);
-    let e = symbol!("y", R);
-    let test = &d + &d;
-    let test = &d + &test;
-    println!("{}", test);
-    let b = a + &b + &c + d + &e + &e;
-    println!("{}", b);
-    let b = (b.clone() + &b + b.clone() * &c) * parse!("10", R);
-    println!("{} = {}", b, b.expand());
-    println!("{}", parse!("(x*y)^2", R));
+    println!("{}", parse!("71/1200 + (x^6*2)^-1", R));
+    println!("{}", parse!("abs((x*y)^2)", R));
     // let a = parse!("(x+y)", R);
     // let mut s = a.clone();
     // for i in 0..18 {
@@ -32,17 +19,23 @@ pub fn main() {
     // println!("{}", parse!("abs(abs(-3 + 2))", R));
     println!("{}", parse!("abs(3) * abs(3)", R));
 
-    match parse!("[[2*(x^2)^3, 4], [2, 3]]", M) {
+    // match parse!("[[2*(x^2)^3, 4], [2, 3]]", M) {
+    match parse!("[[1, 4], [2, 3]]", M) {
         formalith::term::Term::Value(value) => match value.get_value() {
-            VectorSpaceElement::Vector(mut matrix) => {
-                matrix.gaussian_elimination();
-                println!("{}", matrix);
+            VectorSpaceElement::Vector(matrix) => {
+                // matrix.partial_row_reduce();
+                println!("{}\n=\n{}", matrix, matrix.inv().unwrap());
+                println!("{}", matrix.det().unwrap());
             }
             _ => {}
         },
         _ => {}
     }
-    println!("{}", parse!("abs(3) *[[2*(x^2)^3, 4], [2, 3]]", M));
+    println!(
+        "{}",
+        parse!("abs(x) *[[1, 4, 5], [2, 3^x, 6], [2, 3, 6]]", M)
+    );
+    // println!("{}", parse!("abs(3) *[[2*(x^2)^3, 4], [2, 3]]", M));
     // loop {
     //     let mut s = String::new();
     //     std::io::stdin().read_line(&mut s).unwrap();

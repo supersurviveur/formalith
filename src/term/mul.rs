@@ -104,9 +104,15 @@ impl<T: Group> Print for Mul<T> {
     fn pretty_print(&self, options: &PrintOptions) -> crate::printer::PrettyPrinter {
         let mut res: Option<PrettyPrinter> = None;
         for term in self.factors.iter() {
-            let elem = Print::pretty_print(term, options);
+            let mut elem = Print::pretty_print(term, options);
+            if match term {
+                Term::Add(_) => true,
+                _ => false,
+            } {
+                elem.paren();
+            }
             if let Some(res) = &mut res {
-                res.concat("*", &elem);
+                res.concat("⋅", false, &elem);
             } else {
                 res = Some(elem);
             }
