@@ -3,21 +3,21 @@
 use std::fmt::Display;
 
 use crate::{
-    field::Group,
+    field::{Group, Ring},
     printer::{PrettyPrinter, Print, PrintOptions},
 };
 
-use super::{Flags, Term};
+use super::{Flags, Term, Value};
 
 /// A sum of expressions.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Add<T: Group> {
     flags: u8,
     pub(crate) terms: Vec<Term<T>>,
-    pub(crate) ring: &'static T,
+    pub(crate) ring: T,
 }
 
-impl<T: Group> Flags for Add<T> {
+impl<T: Ring> Flags for Add<T> {
     fn get_flags(&self) -> u8 {
         self.flags
     }
@@ -26,9 +26,9 @@ impl<T: Group> Flags for Add<T> {
     }
 }
 
-impl<T: Group> Add<T> {
+impl<T: Ring> Add<T> {
     /// Create an empty sum expression.
-    pub fn new(terms: Vec<Term<T>>, ring: &'static T) -> Self {
+    pub fn new(terms: Vec<Term<T>>, ring: T) -> Self {
         Self {
             flags: 0,
             terms,
@@ -36,7 +36,7 @@ impl<T: Group> Add<T> {
         }
     }
     /// Create a new empty sum, with an inner vec with a defined capacity.
-    pub fn with_capacity(capacity: usize, ring: &'static T) -> Self {
+    pub fn with_capacity(capacity: usize, ring: T) -> Self {
         Self {
             flags: 0,
             terms: Vec::with_capacity(capacity),
@@ -58,16 +58,57 @@ impl<T: Group> Add<T> {
     }
 }
 
-impl<T: Group> Print for Add<T> {
+impl<T: Ring> IntoIterator for Add<T> {
+    type Item = Term<T>;
+
+    type IntoIter = std::vec::IntoIter<Term<T>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.terms.into_iter()
+    }
+}
+
+impl<'a, T: Ring> IntoIterator for &'a Add<T> {
+    type Item = &'a Term<T>;
+
+    type IntoIter = std::slice::Iter<'a, Term<T>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.terms.iter()
+    }
+}
+
+impl<T: Ring> Print for Add<T> {
     fn print(
         &self,
         options: &crate::printer::PrintOptions,
         f: &mut std::fmt::Formatter<'_>,
     ) -> std::fmt::Result {
         for (i, term) in self.terms.iter().enumerate() {
-            Print::print(term, options, f)?;
-            if i != self.len() - 1 {
-                Self::operator("+", options, f)?;
+            match term {
+                Term::Value(Value { value, ring, .. }) if term.is_strictly_negative() => {
+                    if i != 0 {
+                        Self::operator("-", options, f)?;
+                    }
+                    Print::print(&Value::new(ring.neg(value), *ring), options, f)?;
+                }
+                Term::Mul(mul)
+                    if mul.has_coeff()
+                        && mul.factors.last().unwrap().is_strictly_negative()
+                        && i != 0 =>
+                {
+                    let mut mul = mul.clone();
+                    let last = mul.factors.last_mut().unwrap();
+                    mul.ring.neg_assign(&mut unsafe { last.as_value() }.value);
+                    Self::operator("-", options, f)?;
+                    Print::print(&mul, options, f)?;
+                }
+                _ => {
+                    if i != 0 {
+                        Self::operator("+", options, f)?;
+                    }
+                    Print::print(term, options, f)?;
+                }
             }
         }
         Ok(())
@@ -76,18 +117,46 @@ impl<T: Group> Print for Add<T> {
     fn pretty_print(&self, options: &PrintOptions) -> crate::printer::PrettyPrinter {
         let mut res: Option<PrettyPrinter> = None;
         for term in self.terms.iter() {
-            let elem = Print::pretty_print(term, options);
-            if let Some(res) = &mut res {
-                res.concat("+", true, &elem);
-            } else {
-                res = Some(elem);
+            match term {
+                Term::Value(Value { value, ring, .. }) if term.is_strictly_negative() => {
+                    let elem = Print::pretty_print(&Value::new(ring.neg(value), *ring), options);
+                    if let Some(res) = &mut res {
+                        res.concat("-", true, &elem);
+                    } else {
+                        res = Some(elem);
+                    }
+                }
+                Term::Mul(mul)
+                    if {
+                        match mul.factors.last() {
+                            Some(Term::Value(_)) => {
+                                mul.factors.last().unwrap().is_strictly_negative()
+                            }
+                            _ => false,
+                        }
+                    } && res.is_some() =>
+                {
+                    let mut mul = mul.clone();
+                    let last = mul.factors.last_mut().unwrap();
+                    mul.ring.neg_assign(&mut unsafe { last.as_value() }.value);
+                    let elem = Print::pretty_print(&mul, options);
+                    res.as_mut().unwrap().concat("-", true, &elem);
+                }
+                _ => {
+                    let elem = Print::pretty_print(term, options);
+                    if let Some(res) = &mut res {
+                        res.concat("+", true, &elem);
+                    } else {
+                        res = Some(elem);
+                    }
+                }
             }
         }
         res.unwrap()
     }
 }
 
-impl<T: Group> Display for Add<T> {
+impl<T: Ring> Display for Add<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Print::fmt(self, &PrintOptions::default(), f)
     }

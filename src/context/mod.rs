@@ -8,16 +8,17 @@ use std::{
 
 use append_only_vec::AppendOnlyVec;
 
+use crate::printer::{PrettyPrinter, Print};
+
 /// Store all symbols' data created
 static SYMBOLS: AppendOnlyVec<SymbolData> = AppendOnlyVec::new();
 
 /// Store the global context containing symbols' data
 static GLOBAL_CONTEXT: LazyLock<RwLock<Context>> = LazyLock::new(|| RwLock::new(Context::new()));
-
 /// A symbol, representing a named variable.
 ///
 /// See [crate::symbol!] to create a new symbol.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Symbol(usize);
 
 impl Symbol {
@@ -40,6 +41,23 @@ impl Symbol {
             .write()
             .unwrap()
             .get_symbol(name)
+    }
+}
+
+impl Print for Symbol {
+    fn print(
+        &self,
+        _options: &crate::printer::PrintOptions,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        f.write_str(&Context::get_symbol_data(self).name)
+    }
+
+    fn pretty_print(
+        &self,
+        _options: &crate::printer::PrintOptions,
+    ) -> crate::printer::PrettyPrinter {
+        PrettyPrinter::from(Context::get_symbol_data(self).name.clone())
     }
 }
 
@@ -85,8 +103,9 @@ pub struct Context {
 impl Context {
     /// Absolute function
     pub const ABS: Symbol = Symbol(0);
+    pub const DET: Symbol = Symbol(1);
 
-    const BUILTIN_NAMES: [&'static str; 1] = ["abs"];
+    const BUILTIN_NAMES: [&'static str; 2] = ["abs", "det"];
 
     /// Create a new empty context
     pub fn new() -> Self {

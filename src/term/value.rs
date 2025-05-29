@@ -1,23 +1,23 @@
 //! Constant value expression.
 
 use crate::{
-    field::Group,
+    field::{Group, Ring},
     printer::Print,
 };
 
 use super::{Flags, NORMALIZED};
 
 /// A constant in a mathematical expression, living in the algebraic set T
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Value<T: Group> {
     flags: u8,
     pub(crate) value: T::Element,
-    pub(crate) ring: &'static T,
+    pub(crate) ring: T,
 }
 
 impl<T: Group> Value<T> {
     /// Create a new `Value` from an element of the set T
-    pub fn new(value: T::Element, ring: &'static T) -> Self {
+    pub fn new(value: T::Element, ring: T) -> Self {
         Self {
             flags: NORMALIZED,
             value,
@@ -39,7 +39,7 @@ impl<T: Group> Flags for Value<T> {
     }
 }
 
-impl<T: Group> Print for Value<T> {
+impl<T: Ring> Print for Value<T> {
     fn print(
         &self,
         _options: &crate::printer::PrintOptions,

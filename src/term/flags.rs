@@ -4,7 +4,7 @@
 pub(crate) const NORMALIZED: u8 = 0x1;
 
 /// Utility trait to manage expression's flags
-pub(crate) trait Flags {
+pub trait Flags {
     /// Return the flags of the expression
     fn get_flags(&self) -> u8;
     /// Return a mutable reference to the flags of the expression

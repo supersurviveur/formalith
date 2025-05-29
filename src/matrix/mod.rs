@@ -6,16 +6,16 @@ use std::{
 };
 
 use crate::{
-    field::{Field, Group, Ring},
+    field::{Group, Ring},
     printer::{PrettyPrinter, Print, PrintOptions},
 };
 
 /// A matrix with coefficients living in `T`.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Matrix<T: Group> {
     size: (usize, usize),
     pub(crate) data: Vec<T::Element>,
-    ring: &'static T,
+    ring: T,
 }
 
 /// An error thrown by a matrix method.
@@ -25,15 +25,15 @@ pub enum MatrixError {
     NotSquare,
 }
 
-type MatrixResult<T> = Result<T, MatrixError>;
+pub type MatrixResult<T> = Result<T, MatrixError>;
 
 impl<T: Group> Matrix<T> {
     /// Create a new matrix
-    pub fn new(size: (usize, usize), data: Vec<T::Element>, ring: &'static T) -> Self {
+    pub fn new(size: (usize, usize), data: Vec<T::Element>, ring: T) -> Self {
         Self { size, data, ring }
     }
     /// Create a new matrix filled with zeros.
-    pub fn zero(size: (usize, usize), ring: &'static T) -> Self {
+    pub fn zero(size: (usize, usize), ring: T) -> Self {
         Self::new(size, vec![ring.zero(); size.0 * size.1], ring)
     }
 
@@ -174,7 +174,7 @@ impl<T: Group> Print for Matrix<T> {
         }
         for x in 0..self.height() {
             for y in 0..self.width() {
-                coeffs[x * self.width() + y].center(
+                lines_height[x] = coeffs[x * self.width() + y].center(
                     lines_height[x],
                     columns_width[y],
                     lines_baselines[x],
@@ -195,13 +195,13 @@ impl<T: Group> Print for Matrix<T> {
     }
 }
 
-impl<T: Group> Display for Matrix<T> {
+impl<T: Ring> Display for Matrix<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Print::fmt(self, &PrintOptions::default(), f)
     }
 }
 
-impl<T: Field> Matrix<T> {
+impl<T: Ring> Matrix<T> {
     /// Transform the matrix in place in row reduced echelon form.
     pub fn row_reduce(&mut self) {
         self.partial_row_reduce();
@@ -213,7 +213,13 @@ impl<T: Field> Matrix<T> {
             // Find the pivot
             if let Some(pivot) = (0..self.width()).find(|x| !self.ring.is_zero(&self[(line, *x)])) {
                 if !self.ring.is_one(&self[(line, pivot)]) {
-                    self.scale_row(line, &self.ring.inv(&self[(line, pivot)]));
+                    self.scale_row(
+                        line,
+                        &self.ring.try_inv(&self[(line, pivot)]).expect(&format!(
+                            "Can't execute back substitution, pivot {} isn't inversible",
+                            &self[(line, pivot)]
+                        )),
+                    );
                 }
                 // Remove coefficients under the pivot
                 for i in 0..line {
@@ -315,7 +321,6 @@ impl<T: Ring> Matrix<T> {
             return Err(MatrixError::NotSquare);
         }
 
-        // TODO det sign
         self.partial_row_reduce();
         let mut det = self.ring.one();
         for line in 0..self.width() {

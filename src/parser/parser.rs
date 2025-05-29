@@ -1,11 +1,12 @@
 //! Parser implementation.
 
-use std::fmt::Debug;
+use std::error::Error;
+use std::fmt::{Debug, Display};
 use std::iter::Peekable;
 use std::ops::Range;
 
-use crate::context::Symbol;
-use crate::field::Ring;
+use crate::context::{Context, Symbol};
+use crate::field::{Ring, M};
 use crate::term::{Fun, SymbolTerm, Term, Value};
 
 use super::lexer::{Lexer, Token, TokenKind};
@@ -42,6 +43,14 @@ impl ParserError {
     }
 }
 
+impl Error for ParserError {}
+
+impl Display for ParserError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        todo!()
+    }
+}
+
 /// A parser over a string input.
 #[derive(Debug)]
 pub struct Parser<'a> {
@@ -68,6 +77,12 @@ impl<'a> Parser<'a> {
         parser.next_token();
         parser
     }
+}
+
+pub trait ParserTrait<E: Ring> {
+    /// Parse an expression, which can be a literal, a sum, a group ()...
+    fn parse_expression(&mut self, priority: usize, set: E)
+        -> Result<Option<Term<E>>, ParserError>;
 }
 
 impl Parser<'_> {
@@ -126,14 +141,14 @@ impl Parser<'_> {
         }
     }
     /// Parse the parser's string, returning the parsed mathematical expression.
-    pub fn parse<E: Ring>(&mut self, set: &'static E) -> Result<Term<E>, ParserError> {
+    pub fn parse<E: Ring>(&mut self, set: E) -> Result<Term<E>, ParserError> {
         Ok(self
             .parse_expression(0, set)?
             .ok_or(ParserError::new("Input was empty".into()))?
             .normalize())
     }
 
-    fn parse_symbol<E: Ring>(&mut self, set: &'static E) -> Result<Option<Term<E>>, ParserError> {
+    fn parse_symbol<E: Ring>(&mut self, set: E) -> Result<Option<Term<E>>, ParserError> {
         match &self.token.kind {
             TokenKind::Ident(sym) => {
                 let tmp = sym.clone();
@@ -143,7 +158,7 @@ impl Parser<'_> {
             _ => Ok(None),
         }
     }
-    fn parse_group<E: Ring>(&mut self, set: &'static E) -> Result<Option<Term<E>>, ParserError> {
+    fn parse_group<E: Ring>(&mut self, set: E) -> Result<Option<Term<E>>, ParserError> {
         match &self.token.kind {
             TokenKind::OpenParen => {
                 self.next_token();
@@ -154,14 +169,37 @@ impl Parser<'_> {
             _ => Ok(None),
         }
     }
-    /// Parse an expression, which can be a literal, a sum, a group ()...
-    pub fn parse_expression<E: Ring>(
+
+    fn parse_args<U: Ring>(&mut self, arg_set: U) -> Result<Vec<Term<U>>, ParserError> {
+        let mut args = vec![];
+        args.push(self.parse_expression(0, arg_set)?.unwrap());
+        while self.token.kind == TokenKind::Comma {
+            self.next_token();
+            args.push(self.parse_expression(0, arg_set)?.unwrap())
+        }
+        Ok(args)
+    }
+}
+
+impl<E: Ring> ParserTrait<M<M<M<E>>>> for Parser<'_> {
+    fn parse_expression(
+        &mut self,
+        _: usize,
+        _: M<M<M<E>>>,
+    ) -> Result<Option<Term<M<M<M<E>>>>>, ParserError> {
+        Err(ParserError::new(
+            "Cannot recurse inside matrix ring more than 2 times".to_string(),
+        ))
+    }
+}
+impl<E: Ring> ParserTrait<E> for Parser<'_> {
+    default fn parse_expression(
         &mut self,
         priority: usize,
-        set: &'static E,
+        set: E,
     ) -> Result<Option<Term<E>>, ParserError> {
         let node = set.parse_expression(self)?;
-        let node = node.map_or_else(|| self.parse_unary(set), |n| Ok(Some(n)))?;
+        let node = node.map_or_else(|| self.parse_unary(priority, set), |n| Ok(Some(n)))?;
         let node = node.map_or_else(|| self.parse_literal(set), |n| Ok(Some(n)))?;
         let node = node.map_or_else(|| self.parse_symbol(set), |n| Ok(Some(n)))?;
         let node = node.map_or_else(|| self.parse_group(set), |n| Ok(Some(n)))?;
@@ -171,14 +209,27 @@ impl Parser<'_> {
                 match (&self.token.kind, &node) {
                     (TokenKind::OpenParen, Term::Symbol(symbol)) => {
                         self.next_token();
-                        let mut args = vec![];
-                        args.push(self.parse_expression(0, set)?.unwrap());
-                        while self.token.kind == TokenKind::Comma {
-                            self.next_token();
-                            args.push(self.parse_expression(0, set)?.unwrap())
-                        }
-                        self.expect_token(TokenKind::CloseParen)?;
-                        node = Term::Fun(Fun::new(symbol.symbol, args, set));
+                        let arg_set = match symbol.symbol {
+                            Context::DET => Term::Fun(Box::new(Fun::new(
+                                symbol.symbol,
+                                self.parse_args(set.get_matrix_ring())?,
+                                set,
+                            ))),
+                            _ => Term::Fun(Box::new(Fun::new(
+                                symbol.symbol,
+                                self.parse_args(set)?,
+                                set,
+                            ))),
+                        };
+                        // let mut args = vec![];
+                        // args.push(self.parse_expression(0, arg_set)?.unwrap());
+                        // while self.token.kind == TokenKind::Comma {
+                        //     self.next_token();
+                        //     args.push(self.parse_expression(0, arg_set)?.unwrap())
+                        // }
+                        // self.expect_token(TokenKind::CloseParen)?;
+                        // node = Term::Fun(Box::new(Fun::new(symbol.symbol, args, set)));
+                        node = arg_set
                     }
                     _ => {}
                 }
@@ -199,12 +250,13 @@ impl Parser<'_> {
             }
         }
     }
-
+}
+impl Parser<'_> {
     fn parse_binary_expr<E: Ring>(
         &mut self,
         current: Term<E>,
         op: Op,
-        set: &'static E,
+        set: E,
     ) -> Result<(Term<E>, bool), ParserError> {
         if let Op::Pow = op {
             if let Some(right) = self.parse_expression(op.get_priority(), set.get_exposant_set())? {
@@ -214,7 +266,7 @@ impl Parser<'_> {
             return Ok((
                 match op {
                     Op::Add => current + right,
-                    Op::Substract => todo!(),
+                    Op::Substract => current - right,
                     Op::Multiply => current * right,
                     Op::Divide => current / right,
                     Op::Pow => unreachable!(),
@@ -225,7 +277,7 @@ impl Parser<'_> {
         Ok((current, false))
     }
 
-    fn parse_literal<E: Ring>(&mut self, set: &'static E) -> Result<Option<Term<E>>, ParserError> {
+    fn parse_literal<E: Ring>(&mut self, set: E) -> Result<Option<Term<E>>, ParserError> {
         let content = &self.input[self.span()];
         match &self.token.kind {
             TokenKind::Literal { .. } => {
@@ -240,13 +292,15 @@ impl Parser<'_> {
             _ => Ok(None),
         }
     }
-    fn parse_unary<E: Ring>(&mut self, set: &'static E) -> Result<Option<Term<E>>, ParserError> {
+    fn parse_unary<E: Ring>(
+        &mut self,
+        priority: usize,
+        set: E,
+    ) -> Result<Option<Term<E>>, ParserError> {
         match self.get_op() {
             Some(Op::Substract) => {
                 self.next_token();
-                Ok(self
-                    .parse_expression(Op::Substract.get_priority(), set)?
-                    .map(|term| -term))
+                Ok(self.parse_expression(priority, set)?.map(|term| -term))
             }
             _ => Ok(None),
         }
