@@ -8,7 +8,7 @@ use owo_colors::{
 };
 use phf::phf_map;
 
-use crate::{field::Group, term::Term};
+use crate::{field::Ring, term::Term};
 
 /// Rendering options are stored here. It can be created from some presets or completly custom.
 pub struct PrintOptions {
@@ -55,18 +55,24 @@ pub trait Print {
         text: &str,
         options: &PrintOptions,
         f: &mut std::fmt::Formatter<'_>,
-    ) -> std::fmt::Result {
+    ) -> std::fmt::Result
+    where
+        Self: Sized,
+    {
         Self::fg::<BrightBlack>(text, options, f)
     }
 
     /// Add paren to the expr if needed.
     #[must_use]
     #[inline(always)]
-    fn group<T: Group>(
+    fn group<T: Ring>(
         elem: &Term<T>,
         options: &PrintOptions,
         f: &mut std::fmt::Formatter<'_>,
-    ) -> std::fmt::Result {
+    ) -> std::fmt::Result
+    where
+        Self: Sized,
+    {
         let need_paren = match elem {
             Term::Value(_) | Term::Symbol(_) | Term::Fun(_) => false,
             Term::Add(_) | Term::Pow(_) | Term::Mul(_) => true,
@@ -88,7 +94,10 @@ pub trait Print {
         text: &str,
         options: &PrintOptions,
         f: &mut std::fmt::Formatter<'_>,
-    ) -> std::fmt::Result {
+    ) -> std::fmt::Result
+    where
+        Self: Sized,
+    {
         if options.colors {
             write!(f, "{}", text.white().dimmed())?;
         } else {
@@ -104,7 +113,10 @@ pub trait Print {
         text: &str,
         options: &PrintOptions,
         f: &mut std::fmt::Formatter<'_>,
-    ) -> std::fmt::Result {
+    ) -> std::fmt::Result
+    where
+        Self: Sized,
+    {
         Self::fg::<Yellow>(text, options, f)
     }
 
@@ -115,7 +127,10 @@ pub trait Print {
         text: &str,
         options: &PrintOptions,
         f: &mut std::fmt::Formatter<'_>,
-    ) -> std::fmt::Result {
+    ) -> std::fmt::Result
+    where
+        Self: Sized,
+    {
         if options.colors {
             write!(f, "{}", text.fg::<C>())?;
         } else {
@@ -169,9 +184,10 @@ impl PrettyPrinter {
     }
 
     /// Center horizontally and vertically the printer to be exactly of size (`height`*`width`)
+    /// Return the final height of the printer (Can be bigger than the expected height, because of baseline alignement)
     ///
     /// Panics if height or width is smaller than printer's size.
-    pub fn center(&mut self, height: usize, width: usize, baseline: usize) {
+    pub fn center(&mut self, height: usize, width: usize, baseline: usize) -> usize {
         if height < self.height() || width < self.width() {
             panic!("Can't center self on a smaller size !");
         }
@@ -183,9 +199,12 @@ impl PrettyPrinter {
         for _ in 0..base_offset {
             self.lines.insert(0, " ".repeat(self.width()));
         }
-        let end_offset = height - self.height();
-        for _ in 0..end_offset {
-            self.lines.push(" ".repeat(self.width()));
+
+        if height > self.height() {
+            let end_offset = height - self.height();
+            for _ in 0..end_offset {
+                self.lines.push(" ".repeat(self.width()));
+            }
         }
 
         // Center horizontally
@@ -196,7 +215,9 @@ impl PrettyPrinter {
             line.insert_str(0, &" ".repeat(offset));
             line.push_str(&" ".repeat(end_offset));
         }
+
         self.width = width;
+        self.height()
     }
 
     /// Concat two pretty printer, aligning their baseline and adding sym between them. `space` can be used to specify if spaces are needed around `sym`.
@@ -294,8 +315,10 @@ impl PrettyPrinter {
     }
     /// Put other as an exposant of self.
     ///
+    /// ```no_test
     ///     other
     /// self
+    /// ```
     pub fn pow(&mut self, other: &Self) {
         // Add space to concat other
         self.baseline += other.height();

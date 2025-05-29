@@ -3,34 +3,34 @@
 use std::cmp::Ordering;
 
 use crate::{
-    field::{Field, Group, Ring},
+    field::{Field, Group, GroupImpl, Ring, RingImpl},
     printer::Print,
 };
 
 use super::{Term, Value};
 
 /// A ring where constants are complete expressions, like `2*x^2`. It is usefull for matrix and polynoms, to allow expressions inside coefficients.
-#[derive(Clone, Debug, PartialEq)]
-pub struct TermField<T: Group>(&'static T);
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct TermField<T: Group>(T);
 
 impl<T: Group> TermField<T> {
     /// Create a new term field for the set `T`
-    pub const fn new(ring: &'static T) -> Self {
+    pub const fn new(ring: T) -> Self {
         Self(ring)
     }
     /// Get the inner set
-    pub fn get_set(&self) -> &'static T {
+    pub fn get_set(&self) -> T {
         self.0
     }
 }
 
-impl<T: Ring> Group for TermField<T> {
+impl<T: Ring> GroupImpl for TermField<T> {
     type Element = Term<T>;
 
     type ExposantSet = Self;
 
-    fn get_exposant_set(&self) -> &Self::ExposantSet {
-        todo!()
+    fn get_exposant_set(&self) -> Self::ExposantSet {
+        *self
     }
 
     fn zero(&self) -> Self::Element {
@@ -64,7 +64,8 @@ impl<T: Ring> Group for TermField<T> {
         elem.pretty_print(options)
     }
 }
-impl<T: Ring> Ring for TermField<T> {
+
+impl<T: Ring> RingImpl for TermField<T> {
     fn one(&self) -> Self::Element {
         Term::Value(Value::new(self.get_set().one(), self.get_set()))
     }
@@ -79,6 +80,9 @@ impl<T: Ring> Ring for TermField<T> {
 
     fn try_inv(&self, a: &Self::Element) -> Option<Self::Element> {
         Some(a.inv())
+    }
+    fn normalize(&self, a: Term<Self>) -> Term<Self> {
+        a.normalize()
     }
 }
 

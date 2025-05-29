@@ -2,7 +2,7 @@
 
 use std::cmp::Ordering;
 
-use crate::field::Ring;
+use crate::field::{Ring, RingImpl};
 
 use super::{Add, Mul, Pow, Term, Value};
 
@@ -86,6 +86,7 @@ impl<T: Ring> std::ops::Add for &Term<T> {
                     },
                     ring,
                 ))
+                .normalize()
             }
         }
     }
@@ -93,6 +94,12 @@ impl<T: Ring> std::ops::Add for &Term<T> {
 
 impl<T: Ring> std::ops::AddAssign<&Self> for Term<T> {
     fn add_assign(&mut self, rhs: &Self) {
+        *self = &*self + &rhs;
+    }
+}
+
+impl<T: Ring> std::ops::AddAssign for Term<T> {
+    fn add_assign(&mut self, rhs: Self) {
         *self = &*self + &rhs;
     }
 }
@@ -117,84 +124,14 @@ impl<T: Ring> std::ops::Mul for &Term<T> {
     type Output = Term<T>;
 
     fn mul(self, rhs: Self) -> Self::Output {
-        let ring = self.get_set();
-        if let Term::Mul(a1) = self {
-            if let Term::Mul(a2) = rhs {
-                let mut res = Mul::with_capacity(a1.len() + a2.len(), ring);
-                let mut a1_iter = a1.factors.iter();
-                let mut a2_iter = a2.factors.iter();
-                let mut a1_cursor = a1_iter.next();
-                let mut a2_cursor = a2_iter.next();
-                while a1_cursor.is_some() || a2_cursor.is_some() {
-                    if let Some(a1) = a1_cursor {
-                        if let Some(a2) = a2_cursor {
-                            match a1.cmp_factors(&a2) {
-                                std::cmp::Ordering::Less => {
-                                    res.push(a1.clone());
-                                    a2_cursor = Some(a2); // Give the borrow back to cursor
-                                    a1_cursor = a1_iter.next();
-                                }
-                                std::cmp::Ordering::Equal => {
-                                    let mut a1_clone = a1.clone();
-                                    if a1_clone.merge_factors(&a2) {
-                                        res.push(a1_clone);
-                                    } else {
-                                        res.push(a1_clone);
-                                        res.push(a2.clone());
-                                    }
-                                    a1_cursor = a1_iter.next();
-                                    a2_cursor = a2_iter.next();
-                                }
-                                std::cmp::Ordering::Greater => {
-                                    res.push(a2.clone());
-                                    a1_cursor = Some(a1); // Give the borrow back to cursor
-                                    a2_cursor = a2_iter.next()
-                                }
-                            }
-                        } else {
-                            res.push(a1.clone());
-                            a1_cursor = a1_iter.next()
-                        }
-                    } else if let Some(a2) = a2_cursor {
-                        res.push(a2.clone());
-                        a2_cursor = a2_iter.next()
-                    }
-                }
-                Term::Mul(res)
-            } else {
-                let mut a1_clone = a1.clone();
-                if !rhs.is_one() {
-                    match a1_clone
-                        .factors
-                        .binary_search_by(|value| value.cmp_factors(&rhs))
-                    {
-                        Ok(i) => {
-                            if !a1_clone.factors[i].merge_factors(&rhs) {
-                                a1_clone.factors.insert(i, rhs.clone())
-                            }
-                        }
-                        Err(i) => a1_clone.factors.insert(i, rhs.clone()),
-                    }
-                }
-                Term::Mul(a1_clone)
-            }
-        } else if let Term::Mul(_) = rhs {
-            rhs.mul(self)
-        } else {
-            let mut self_clone = self.clone();
-            if self_clone.merge_factors(&rhs) {
-                self_clone
-            } else {
-                Term::Mul(Mul::new(
-                    if self_clone.cmp_factors(&rhs) == Ordering::Greater {
-                        vec![rhs.clone(), self_clone]
-                    } else {
-                        vec![self_clone, rhs.clone()]
-                    },
-                    ring,
-                ))
-            }
-        }
+        Term::Mul(Mul::new(vec![self.clone(), rhs.clone()], self.get_set())).normalize()
+        // TODO, normalize mul directly like add
+    }
+}
+
+impl<T: Ring> std::ops::MulAssign<&Self> for Term<T> {
+    fn mul_assign(&mut self, rhs: &Self) {
+        *self = &*self * &rhs;
     }
 }
 
@@ -289,15 +226,51 @@ impl<T: Ring> std::ops::Neg for &Term<T> {
                 mul.set_coeff(mul.ring.neg(&coeff));
             }
             Term::Pow(ref pow) => {
-                let ring = pow.ring;
+                let ring = pow.set;
                 new = Term::Mul(Mul::new(
                     vec![new, Term::Value(Value::new(ring.neg(&ring.one()), ring))],
                     ring,
                 ))
             }
-            Term::Fun(_) => todo!(),
+            Term::Fun(ref fun) => {
+                let set = fun.get_set();
+                new = Term::Mul(Mul::new(
+                    vec![new, Term::Value(Value::new(set.neg(&set.one()), set))],
+                    set,
+                ))
+            }
         }
         new
+    }
+}
+
+impl<T: Ring> std::ops::Sub for &Term<T> {
+    type Output = Term<T>;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        self + &-rhs
+    }
+}
+
+impl<T: Ring> std::ops::SubAssign for Term<T> {
+    fn sub_assign(&mut self, rhs: Self) {
+        *self = &*self - &rhs;
+    }
+}
+
+impl<T: Ring> std::ops::Sub<&Self> for Term<T> {
+    type Output = Self;
+
+    fn sub(self, rhs: &Self) -> Self::Output {
+        &self - rhs
+    }
+}
+
+impl<T: Ring> std::ops::Sub for Term<T> {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        &self - &rhs
     }
 }
 

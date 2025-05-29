@@ -1,12 +1,12 @@
 //! Sets specificities implementation.
 
-use std::{cmp::Ordering, fmt};
+use std::{cmp::Ordering, fmt, hash::Hash};
 
 use crate::{
     context::Symbol,
     parser::parser::{Parser, ParserError},
     printer::{PrettyPrinter, PrintOptions},
-    term::Term,
+    term::{Add, Mul, Pow, SymbolTerm, Term, TermField, Value},
 };
 
 pub mod commons;
@@ -16,16 +16,16 @@ pub use commons::*;
 /// - `+` is associative
 /// - `*` has an identity element `zero`
 /// - Every element has an inverse element
-pub trait Group: Clone + fmt::Debug + PartialEq + 'static {
+pub trait GroupImpl: Clone + Copy + fmt::Debug + PartialEq + Eq + Hash + 'static {
     /// The type of the elements living in this group
-    type Element: Clone + fmt::Debug + fmt::Display + PartialEq + PartialOrd;
+    type Element: Clone + fmt::Debug + fmt::Display + PartialEq + Eq + PartialOrd + Hash;
 
     /// The set where exposants live. Mostly [commons::Z], but it can be any ring,
     /// like [const@R] for real numbers since power is not only a notation for `x*x*...*x` but a defined operation.
-    type ExposantSet: Ring;
+    type ExposantSet: GroupImpl;
 
     /// Get the exposant set for this group
-    fn get_exposant_set(&self) -> &Self::ExposantSet;
+    fn get_exposant_set(&self) -> Self::ExposantSet;
 
     /// Get the zero (aka identity element for `+`) of this group
     fn zero(&self) -> Self::Element;
@@ -66,20 +66,31 @@ pub trait Group: Clone + fmt::Debug + PartialEq + 'static {
     /// Parses a string to an element of this group
     fn parse_litteral(&self, value: &str) -> Result<Self::Element, String>;
 
-    /// Custom parsing function, to parse element specific to this group. Check [commons::M::parse_expression] for example.
-    fn parse_expression(
-        &'static self,
-        _parser: &mut Parser,
-    ) -> Result<Option<Term<Self>>, ParserError> {
-        Ok(None)
-    }
-
     /// Pretty print an element of this set.
     fn pretty_print(&self, elem: &Self::Element, options: &PrintOptions) -> PrettyPrinter;
+}
 
-    /// Normalize a mathematical expression using rules specific to this group. Check [commons::R::normalize]
-    fn normalize(&'static self, a: Term<Self>) -> Term<Self> {
-        a
+pub trait Group: GroupImpl<ExposantSet: GroupImpl<ExposantSet = Self::ExposantSet>> {}
+impl<T: GroupImpl<ExposantSet: GroupImpl<ExposantSet = Self::ExposantSet>>> Group for T {}
+pub trait Ring: RingImpl<ExposantSet: RingImpl<ExposantSet = Self::ExposantSet>> {}
+impl<T: RingImpl<ExposantSet: RingImpl<ExposantSet = Self::ExposantSet>>> Ring for T {}
+
+pub trait TryElementCast<T: GroupImpl>: GroupImpl {
+    fn downcast_element(value: T::Element) -> Result<Self::Element, TryCastError>;
+    fn upcast_element(value: Self::Element) -> Result<T::Element, TryCastError>;
+}
+
+impl<T: GroupImpl, U: GroupImpl> TryElementCast<T> for U {
+    default fn downcast_element(
+        value: <T as GroupImpl>::Element,
+    ) -> Result<Self::Element, TryCastError> {
+        todo!()
+    }
+
+    default fn upcast_element(
+        value: Self::Element,
+    ) -> Result<<T as GroupImpl>::Element, TryCastError> {
+        todo!()
     }
 }
 
@@ -87,7 +98,7 @@ pub trait Group: Clone + fmt::Debug + PartialEq + 'static {
 /// - `*` is associative
 /// - `*` has an identity element `one`
 /// - `*` is distributive over `+`
-pub trait Ring: Group {
+pub trait RingImpl: Group {
     /// Get the one (aka identity element for `*`) of this group
     fn one(&self) -> Self::Element;
     /// Check if a number is one.
@@ -109,6 +120,178 @@ pub trait Ring: Group {
     }
     /// Try computing the inverse element of a, returning `None` if it doesn't exist.
     fn try_inv(&self, a: &Self::Element) -> Option<Self::Element>;
+
+    /// Return the expression as a rational expression, (numerator, denominator)
+    fn as_fraction(&self, a: &Self::Element) -> (Self::Element, Self::Element) {
+        (a.clone(), self.one())
+    }
+
+    ///Custom parsing function, to parse element specific to this group. Check [commons::M::parse_expression] for example.
+    fn parse_expression(&self, _parser: &mut Parser) -> Result<Option<Term<Self>>, ParserError>
+    where
+        Self: Group,
+        Self::ExposantSet: Ring,
+    {
+        Ok(None)
+    }
+
+    /// Normalize a mathematical expression using rules specific to this group. Check [commons::R::normalize]
+    fn normalize(&self, a: Term<Self>) -> Term<Self>
+    where
+        Self: Group,
+        Self::ExposantSet: Ring,
+    {
+        a
+    }
+
+    /// Expand a mathematical expression using rules specific to this group. Check [commons::M::expand]
+    fn expand(&self, a: Term<Self>) -> Term<Self>
+    where
+        Self: Group,
+        Self::ExposantSet: Ring,
+    {
+        a
+    }
+
+    /// Simplify a mathematical expression using rules specific to this group. Check [commons::M::simplify]
+    fn simplify(&self, a: Term<Self>) -> Term<Self>
+    where
+        Self: Group,
+        Self::ExposantSet: Ring,
+    {
+        a
+    }
+
+    /// Get associated term field
+    fn get_term_field(&self) -> TermField<Self>
+    where
+        Self: Group,
+        Self::ExposantSet: Ring,
+    {
+        TermField::new(*self)
+    }
+
+    /// Get associated matrix ring
+    fn get_matrix_ring(&self) -> M<Self>
+    where
+        Self: Group,
+        Self::ExposantSet: Ring,
+    {
+        M::new(*self)
+    }
+}
+
+/// Trait to downcast an expression from a set to another set.
+///
+/// It use horrible generic types to work, to avoid issues with infinite type with exposant set.
+/// The hack is to allow only a fixed amount of exposant set (currently 3) that are not their own exposant set (for instance exposant set of R is R).
+/// That way there is only a finite number of sets that can be converted.
+/// This limit can be enlarged by adding more templating, but most set have an exposant set which is already cycling.
+pub trait TryExprCast<From: Ring>: Ring {
+    /// Try to convert an expression over the set T into an expression over the set E.
+    ///
+    /// See [Downcast] to understand the templating.
+    fn downcast_expr(&self, value: Term<From>) -> Result<Term<Self>, TryCastError>;
+    fn upcast_expr(set: From, value: Term<Self>) -> Result<Term<From>, TryCastError>;
+}
+
+impl<From: Ring, To: Ring> TryExprCast<From> for To
+where
+    Self: TryElementCast<From>,
+    Self::ExposantSet: TryElementCast<From::ExposantSet>,
+    <Self::ExposantSet as GroupImpl>::ExposantSet:
+        TryElementCast<<From::ExposantSet as GroupImpl>::ExposantSet>,
+    <Self::ExposantSet as GroupImpl>::ExposantSet:
+        Group<ExposantSet = <Self::ExposantSet as GroupImpl>::ExposantSet>,
+    <From::ExposantSet as GroupImpl>::ExposantSet:
+        Group<ExposantSet = <From::ExposantSet as GroupImpl>::ExposantSet>,
+{
+    fn downcast_expr(&self, value: Term<From>) -> Result<Term<Self>, TryCastError> {
+        match value {
+            Term::Value(value) => Ok(Term::Value(Value::new(
+                <Self as TryElementCast<From>>::downcast_element(value.value)
+                    .map_err(|_| TryCastError())?,
+                *self,
+            ))),
+            Term::Symbol(symbol_term) => {
+                Ok(Term::Symbol(SymbolTerm::new(symbol_term.symbol, *self)))
+            }
+            Term::Add(add) => Ok(Add::new(
+                add.terms
+                    .into_iter()
+                    .map(|x| self.downcast_expr(x))
+                    .collect::<Result<Vec<_>, _>>()?,
+                *self,
+            )
+            .into()),
+            Term::Mul(mul) => Ok(Mul::new(
+                mul.factors
+                    .into_iter()
+                    .map(|x| self.downcast_expr(x))
+                    .collect::<Result<Vec<_>, _>>()?,
+                *self,
+            )
+            .into()),
+            Term::Pow(pow) => Ok(Pow::new(
+                Box::new(self.downcast_expr((*pow.base).clone())?),
+                Box::new(
+                    self.get_exposant_set()
+                        .downcast_expr((**pow.exposant).clone())?,
+                ),
+                *self,
+            )
+            .into()),
+            Term::Fun(_) => {
+                // Function can't be converted. Maybe with constraints we can check if some conversions are possible,
+                // and then use a FunctionWrapper struct implementing Function trait to acheive the "conversion"
+                Err(TryCastError())
+            }
+        }
+    }
+
+    fn upcast_expr(set: From, value: Term<Self>) -> Result<Term<From>, TryCastError> {
+        match value {
+            Term::Value(value) => Ok(Term::Value(Value::new(
+                <Self as TryElementCast<From>>::upcast_element(value.value)
+                    .map_err(|_| TryCastError())?,
+                set,
+            ))),
+            Term::Symbol(symbol_term) => Ok(Term::Symbol(SymbolTerm::new(symbol_term.symbol, set))),
+            Term::Add(add) => Ok(Add::new(
+                add.terms
+                    .into_iter()
+                    .map(|x| Self::upcast_expr(set, x))
+                    .collect::<Result<Vec<_>, _>>()?,
+                set,
+            )
+            .into()),
+            Term::Mul(mul) => Ok(Mul::new(
+                mul.factors
+                    .into_iter()
+                    .map(|x| Self::upcast_expr(set, x))
+                    .collect::<Result<Vec<_>, _>>()?,
+                set,
+            )
+            .into()),
+            Term::Pow(pow) => Ok(Pow::new(
+                Box::new(Self::upcast_expr(set, (*pow.base).clone())?),
+                Box::new(Self::ExposantSet::upcast_expr(
+                    set.get_exposant_set(),
+                    (**pow.exposant).clone(),
+                )?),
+                set,
+            )
+            .into()),
+            Term::Fun(_) => Err(TryCastError()),
+        }
+    }
+}
+
+/// An euclidean ring is a [Ring] TODO
+pub trait EuclideanRing: Ring {
+    fn rem(&self, a: &Self::Element, b: &Self::Element) -> Self::Element;
+    fn quot_rem(&self, a: &Self::Element, b: &Self::Element) -> (Self::Element, Self::Element);
+    fn gcd(&self, a: &Self::Element, b: &Self::Element) -> Self::Element;
 }
 
 /// A field is a [Ring] TODO
