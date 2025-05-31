@@ -1,4 +1,4 @@
-//! Complexity is `{$f(x) = (1+ epsilon)abs(x)$}`, where `{$abs(epsilon) < 2^-54$}`
+//! Complexity is $f(x) = (1+ epsilon)abs(x)$, where $abs(epsilon) < 2^-54$, $ x^2 $
 //!
 //! $ f(x) $
 
