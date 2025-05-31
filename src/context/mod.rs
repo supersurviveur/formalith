@@ -103,6 +103,7 @@ pub struct Context {
 impl Context {
     /// Absolute function
     pub const ABS: Symbol = Symbol(0);
+    /// Determinant function
     pub const DET: Symbol = Symbol(1);
 
     const BUILTIN_NAMES: [&'static str; 2] = ["abs", "det"];
@@ -132,13 +133,19 @@ impl Context {
     // / assert_eq!(Context::get_global_context().get_symbol("x"), x);
     // / ```
     pub fn get_symbol(&mut self, name: String) -> Symbol {
-        self.symbols
+        *self
+            .symbols
             .entry(name)
             .or_insert_with_key(|name| Symbol(SYMBOLS.push(SymbolData { name: name.clone() })))
-            .clone()
     }
     /// Return a reference to the [SymbolData] of a given [Symbol]
     pub fn get_symbol_data(symbol: &Symbol) -> &'static SymbolData {
         &SYMBOLS[symbol.0]
+    }
+}
+
+impl Default for Context {
+    fn default() -> Self {
+        Self::new()
     }
 }

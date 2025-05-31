@@ -1,4 +1,4 @@
-//! Most commons groups, rings and fields like [R], [C] or [M].
+//! Most commons groups, rings and fields like [struct@R] or [struct@M].
 //! These are currently only implemented using malachite arbitrary precision numbers.
 
 use malachite::base::num::arithmetic;
@@ -14,16 +14,14 @@ use malachite::base::num::{
 use malachite::rational::Rational;
 use malachite::Integer;
 use malachite::Natural;
-use std::cell::OnceCell;
-use std::cell::RefCell;
 use std::error::Error;
 use std::fmt::Display;
-use std::mem::MaybeUninit;
 use std::{cmp::Ordering, fmt, marker::PhantomData};
 
 use crate::combinatorics;
 use crate::context::Context;
 use crate::matrix::Matrix;
+use crate::matrix::MatrixResult;
 use crate::parser::lexer::TokenKind;
 use crate::parser::parser::Parser;
 use crate::parser::parser::ParserError;
@@ -31,6 +29,7 @@ use crate::parser::parser::ParserTrait;
 use crate::printer::PrettyPrinter;
 use crate::printer::Print;
 use crate::term;
+use crate::term::Fun;
 use crate::term::Mul;
 use crate::term::TermField;
 use crate::{
@@ -38,11 +37,11 @@ use crate::{
     term::{Term, Value},
 };
 
-use super::GroupImpl;
-use super::RingImpl;
-use super::TryElementCast;
-use super::TryExprCast;
-use super::{Derivable, Field, Group, Ring};
+use super::Group;
+use super::Ring;
+use super::TryElementFrom;
+use super::TryExprFrom;
+use super::{Derivable, Field, GroupBound, RingBound};
 
 /// The integer ring
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -52,7 +51,7 @@ pub struct Z<T> {
 
 impl<T: Clone> Copy for Z<T> {}
 
-impl GroupImpl for Z<Integer> {
+impl Group for Z<Integer> {
     type Element = Integer;
 
     type ExposantSet = Z<malachite::Integer>; // TODO change type
@@ -78,21 +77,19 @@ impl GroupImpl for Z<Integer> {
     }
 
     fn parse_litteral(&self, value: &str) -> Result<Self::Element, String> {
-        Integer::from_sci_string(value).ok_or(format!(
-            "Failed to parse \"{}\" to malachite::Integer",
-            value
-        ))
+        Integer::from_sci_string(value)
+            .ok_or(format!("Failed to parse \"{value}\" to malachite::Integer",))
     }
     fn pretty_print(
         &self,
         elem: &Self::Element,
-        options: &crate::printer::PrintOptions,
+        _: &crate::printer::PrintOptions,
     ) -> crate::printer::PrettyPrinter {
-        todo!()
+        PrettyPrinter::from(format!("{elem}"))
     }
 }
 
-impl RingImpl for Z<Integer> {
+impl Ring for Z<Integer> {
     fn one(&self) -> Self::Element {
         <Integer as malachite::base::num::basic::traits::One>::ONE
     }
@@ -129,7 +126,7 @@ pub struct R<T> {
 
 impl<T: Clone> Copy for R<T> {}
 
-impl GroupImpl for R<malachite::rational::Rational> {
+impl Group for R<malachite::rational::Rational> {
     type Element = Rational;
 
     type ExposantSet = R<Rational>;
@@ -156,8 +153,7 @@ impl GroupImpl for R<malachite::rational::Rational> {
 
     fn parse_litteral(&self, value: &str) -> Result<Self::Element, String> {
         Rational::from_sci_string(value).ok_or(format!(
-            "Failed to parse \"{}\" to malachite::Rational",
-            value
+            "Failed to parse \"{value}\" to malachite::Rational",
         ))
     }
     fn pretty_print(
@@ -167,21 +163,21 @@ impl GroupImpl for R<malachite::rational::Rational> {
     ) -> crate::printer::PrettyPrinter {
         let (num, den) = elem.numerator_and_denominator_ref();
         let mut num = PrettyPrinter::from(if elem.sign() == Ordering::Less {
-            format!("-{}", num)
+            format!("-{num}")
         } else {
-            format!("{}", num)
+            format!("{num}")
         });
         if *den == 1 {
             num
         } else {
-            let den = PrettyPrinter::from(format!("{}", den));
+            let den = PrettyPrinter::from(format!("{den}"));
             num.vertical_concat("─", &den);
             num
         }
     }
 }
 
-impl RingImpl for R<Rational> {
+impl Ring for R<Rational> {
     fn one(&self) -> Self::Element {
         <Rational as malachite::base::num::basic::traits::One>::ONE
     }
@@ -257,7 +253,7 @@ impl RingImpl for R<Rational> {
                         )
                         .into();
                     }
-                    res
+                    return res;
                 }
                 (Term::Value(base), Term::Value(exposant)) => {
                     let exposant = &exposant.value;
@@ -282,24 +278,32 @@ impl RingImpl for R<Rational> {
                         *self,
                     ));
                 }
-                _ => a,
+                _ => {}
             },
-            Term::Fun(fun) => match fun {
-                // Context::ABS => {
-                //     // TODO check parameters count, maybe at function creation in parser
-                //     let content = fun.args.first().unwrap();
-                //     if content >= &0.into() {
-                //         content.clone()
-                //     } else if content < &0.into() {
-                //         -content
-                //     } else {
-                //         a
-                //     }
-                // }
-                _ => a,
+            Term::Fun(fun) => match fun.get_ident() {
+                Context::ABS => {
+                    // TODO check parameters count, maybe at function creation in parser
+                    if let Some(fun) = fun.as_any().downcast_ref::<Fun<Self>>() {
+                        let content = fun.args.first().unwrap();
+                        if content >= &0.into() {
+                            return content.clone();
+                        } else if content < &0.into() {
+                            return -content;
+                        }
+                    }
+                }
+                Context::DET => {
+                    if let Some(Term::Value(matrix)) = fun.get_arg::<M<Self>>() {
+                        if let Ok(res) = matrix.value.det(*self) {
+                            return res;
+                        }
+                    }
+                }
+                _ => {}
             },
-            _ => a,
+            _ => {}
         }
+        a
     }
 
     fn expand(&self, a: Term<Self>) -> Term<Self> {
@@ -315,7 +319,7 @@ impl RingImpl for R<Rational> {
                             let mut iterator =
                                 combinatorics::CompositionIterator::new(add.len(), num);
 
-                            while let Some(k) = iterator.next() {
+                            while let Some(k) = iterator.next_composition() {
                                 let ik = k
                                     .iter()
                                     .map(|x| Integer::from(*x))
@@ -370,21 +374,31 @@ impl Derivable for R<Rational> {
     }
 }
 
-/// The real field, using [malachite::Rational] as constants to get arbitrary precision numbers.
+/// The real field, using [malachite::rational::Rational] as constants to get arbitrary precision numbers.
 pub const R: R<Rational> = R {
     phantom: PhantomData,
 };
 
 /// An enum representing elements inside a vector space.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum VectorSpaceElement<T: Group, Vector> {
-    /// A scalar element living in [T]
+pub enum VectorSpaceElement<T: GroupBound, Vector> {
+    /// A scalar element living in `T`
     Scalar(T::Element),
     /// A vector living in the vector space
     Vector(Vector),
 }
 
-impl<T: Group, Vector: PartialEq> PartialOrd for VectorSpaceElement<T, Vector>
+impl<T: RingBound> VectorSpaceElement<T, Matrix<TermField<T>>> {
+    /// Compute the determinante of self in set `T`.
+    pub fn det(&self, set: T) -> MatrixResult<Term<T>> {
+        match self {
+            VectorSpaceElement::Scalar(scalar) => Ok(Term::Value(Value::new(scalar.clone(), set))),
+            VectorSpaceElement::Vector(matrix) => matrix.det(),
+        }
+    }
+}
+
+impl<T: GroupBound, Vector: PartialEq> PartialOrd for VectorSpaceElement<T, Vector>
 where
     T::Element: PartialOrd,
 {
@@ -399,7 +413,7 @@ where
     }
 }
 
-impl<T: Group, Vector: Display> Display for VectorSpaceElement<T, Vector> {
+impl<T: GroupBound, Vector: Display> Display for VectorSpaceElement<T, Vector> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             VectorSpaceElement::Scalar(scalar) => write!(f, "{}", scalar),
@@ -410,17 +424,18 @@ impl<T: Group, Vector: Display> Display for VectorSpaceElement<T, Vector> {
 
 /// The matrix ring.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct M<T: Ring> {
+pub struct M<T: RingBound> {
     pub(crate) scalar_sub_set: T,
 }
 
-impl<T: Ring> M<T> {
+impl<T: RingBound> M<T> {
+    /// Create a new matrix ring over T
     pub fn new(scalar_sub_set: T) -> Self {
         Self { scalar_sub_set }
     }
 }
 
-impl<T: Ring> GroupImpl for M<T> {
+impl<T: RingBound> Group for M<T> {
     type Element = VectorSpaceElement<T, Matrix<TermField<T>>>;
 
     type ExposantSet = Self;
@@ -472,12 +487,12 @@ impl<T: Ring> GroupImpl for M<T> {
     ) -> crate::printer::PrettyPrinter {
         match elem {
             VectorSpaceElement::Scalar(scalar) => self.scalar_sub_set.pretty_print(scalar, options),
-            VectorSpaceElement::Vector(matrix) => matrix.pretty_print(options),
+            VectorSpaceElement::Vector(matrix) => Print::pretty_print(matrix, options),
         }
     }
 }
 
-impl<T: Ring> RingImpl for M<T> {
+impl<T: RingBound> Ring for M<T> {
     fn one(&self) -> Self::Element {
         VectorSpaceElement::Scalar(self.scalar_sub_set.one())
     }
@@ -486,7 +501,7 @@ impl<T: Ring> RingImpl for M<T> {
         VectorSpaceElement::Scalar(self.scalar_sub_set.nth(nth))
     }
 
-    fn mul(&self, a: &Self::Element, b: &Self::Element) -> Self::Element {
+    fn mul(&self, _a: &Self::Element, _b: &Self::Element) -> Self::Element {
         todo!()
     }
 
@@ -518,10 +533,10 @@ impl<T: Ring> RingImpl for M<T> {
 
     fn normalize(&self, a: Term<Self>) -> Term<Self> {
         // Try downcasting the expression and apply normalization over the scalar set
-        match <T as TryExprCast<Self>>::downcast_expr(&self.scalar_sub_set, a.clone()) {
+        match <T as TryExprFrom<Self>>::try_from_expr(&self.scalar_sub_set, a.clone()) {
             Ok(expr) => {
-                return <T as TryExprCast<Self>>::upcast_expr(
-                    *self,
+                return <Self as TryExprFrom<T>>::try_from_expr(
+                    self,
                     self.scalar_sub_set.normalize(expr),
                 )
                 .expect("Converting back to matrix should always be possible")
@@ -532,10 +547,10 @@ impl<T: Ring> RingImpl for M<T> {
             Term::Value(value) => match &value.value {
                 VectorSpaceElement::Vector(matrix) => {
                     let mut res = matrix.clone();
-                    res.data.iter_mut().for_each(|x| *x = x.normalize());
-                    Term::Value(Value::new(VectorSpaceElement::Vector(res), *self))
+                    res.data.iter_mut().for_each(|x| *x = (*x).normalize());
+                    return Term::Value(Value::new(VectorSpaceElement::Vector(res), *self));
                 }
-                VectorSpaceElement::Scalar(_) => a,
+                VectorSpaceElement::Scalar(_) => {}
             },
             Term::Pow(term::Pow { base, exposant, .. }) => match (&**base, &***exposant) {
                 (
@@ -547,8 +562,8 @@ impl<T: Ring> RingImpl for M<T> {
                         value: exposant, ..
                     }),
                 ) => {
-                    if self.partial_cmp(exposant, &self.zero()) == Some(Ordering::Less) {
-                        Term::Pow(term::Pow::new(
+                    if Group::partial_cmp(self, exposant, &self.zero()) == Some(Ordering::Less) {
+                        return Term::Pow(term::Pow::new(
                             Term::Value(Value::new(
                                 VectorSpaceElement::Vector(
                                     matrix
@@ -559,15 +574,14 @@ impl<T: Ring> RingImpl for M<T> {
                             )),
                             Term::Value(Value::new(self.neg(exposant), *self)),
                             *self,
-                        ))
-                    } else {
-                        a
+                        ));
                     }
                 }
-                _ => a,
+                _ => {}
             },
-            _ => a,
+            _ => {}
         }
+        a
     }
 
     fn expand(&self, a: Term<Self>) -> Term<Self> {
@@ -576,7 +590,7 @@ impl<T: Ring> RingImpl for M<T> {
                 VectorSpaceElement::Vector(matrix) => {
                     let mut res = matrix.clone();
                     res.data.iter_mut().for_each(|x| {
-                        *x = x.expand();
+                        *x = (*x).expand();
                     });
                     Term::Value(Value::new(VectorSpaceElement::Vector(res), *self))
                 }
@@ -592,7 +606,7 @@ impl<T: Ring> RingImpl for M<T> {
                 VectorSpaceElement::Vector(matrix) => {
                     let mut res = matrix.clone();
                     res.data.iter_mut().for_each(|x| {
-                        *x = x.simplify();
+                        *x = (*x).simplify();
                     });
                     Term::Value(Value::new(VectorSpaceElement::Vector(res), *self))
                 }
@@ -654,42 +668,32 @@ impl<T: Ring> RingImpl for M<T> {
 
 /// Failed to convert a term into another term.
 #[derive(Debug, Clone, Copy)]
-pub struct TryCastError();
+pub struct TryCastError(pub(crate) &'static str);
 impl Error for TryCastError {}
 
 impl fmt::Display for TryCastError {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("Can't cast to this group")
+        f.write_str(&format!("Can't cast to this group: {}", self.0))
     }
 }
 
-impl<T: Ring> TryElementCast<M<T>> for T {
-    fn downcast_element(
-        value: <M<T> as GroupImpl>::Element,
-    ) -> Result<Self::Element, TryCastError> {
+impl<T: RingBound> TryElementFrom<M<T>> for T {
+    fn try_from_element(value: <M<T> as Group>::Element) -> Result<Self::Element, TryCastError> {
         match value {
             VectorSpaceElement::Scalar(scalar) => Ok(scalar),
-            VectorSpaceElement::Vector(_) => Err(TryCastError()),
+            VectorSpaceElement::Vector(_) => Err(TryCastError("Can't cast matrix to scalar")),
         }
     }
+}
 
-    fn upcast_element(value: Self::Element) -> Result<<M<T> as GroupImpl>::Element, TryCastError> {
+impl<T: RingBound> TryElementFrom<T> for M<T> {
+    fn try_from_element(value: <T as Group>::Element) -> Result<Self::Element, TryCastError> {
         Ok(VectorSpaceElement::Scalar(value))
     }
 }
 
-impl<T: Group> TryElementCast<T> for T {
-    fn downcast_element(value: <T>::Element) -> Result<Self::Element, TryCastError> {
-        Ok(value)
-    }
-
-    fn upcast_element(value: Self::Element) -> Result<<T>::Element, TryCastError> {
-        Ok(value)
-    }
-}
-
-/// The matrix field, with real coefficients. See [R]
+/// The matrix field, with real coefficients. See [const@R]
 pub const M: M<R<Rational>> = M { scalar_sub_set: R };
 
 impl From<usize> for Term<R<Rational>> {
@@ -698,16 +702,16 @@ impl From<usize> for Term<R<Rational>> {
     }
 }
 
-impl<T> TryFrom<Term<R<T>>> for <R<T> as GroupImpl>::Element
+impl<T> TryElementFrom<TermField<R<T>>> for R<T>
 where
-    R<T>: Ring,
+    R<T>: RingBound,
 {
-    type Error = &'static str;
-
-    fn try_from(value: Term<R<T>>) -> Result<Self, Self::Error> {
+    fn try_from_element(
+        value: <TermField<R<T>> as Group>::Element,
+    ) -> Result<Self::Element, TryCastError> {
         match value {
             Term::Value(value) => Ok(value.get_value()),
-            _ => Err("Value is not a constant"),
+            _ => Err(TryCastError("Value is not a constant")),
         }
     }
 }

@@ -38,7 +38,7 @@ impl CompositionIterator<'_> {
     }
 
     /// Yield the next composition.
-    pub fn next(&mut self) -> Option<&[usize]> {
+    pub fn next_composition(&mut self) -> Option<&[usize]> {
         if self.indices.is_empty() {
             return None;
         }

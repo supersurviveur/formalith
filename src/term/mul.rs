@@ -3,7 +3,7 @@
 use std::fmt::Display;
 
 use crate::{
-    field::{Group, Ring},
+    field::{GroupBound, RingBound},
     printer::{PrettyPrinter, Print, PrintOptions},
 };
 
@@ -11,13 +11,13 @@ use super::{Flags, Term, Value};
 
 /// A product of expressions.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Mul<T: Group> {
+pub struct Mul<T: GroupBound> {
     flags: u8,
     pub(crate) factors: Vec<Term<T>>,
     pub(crate) ring: T,
 }
 
-impl<T: Ring> Flags for Mul<T> {
+impl<T: RingBound> Flags for Mul<T> {
     fn get_flags(&self) -> u8 {
         self.flags
     }
@@ -26,7 +26,7 @@ impl<T: Ring> Flags for Mul<T> {
     }
 }
 
-impl<T: Ring> Mul<T> {
+impl<T: RingBound> Mul<T> {
     /// Create a new product expression
     pub fn new(factors: Vec<Term<T>>, ring: T) -> Self {
         Self {
@@ -79,7 +79,7 @@ impl<T: Ring> Mul<T> {
     }
 }
 
-impl<T: Ring> Mul<T> {
+impl<T: RingBound> Mul<T> {
     /// Return the constant coefficient factor of the product if it exists, one otherwise.
     pub fn get_coeff(&self) -> T::Element {
         if let Term::Value(v) = &self.factors.last().unwrap() {
@@ -90,7 +90,7 @@ impl<T: Ring> Mul<T> {
     }
 }
 
-impl<T: Ring> IntoIterator for Mul<T> {
+impl<T: RingBound> IntoIterator for Mul<T> {
     type Item = Term<T>;
 
     type IntoIter = std::vec::IntoIter<Term<T>>;
@@ -100,7 +100,7 @@ impl<T: Ring> IntoIterator for Mul<T> {
     }
 }
 
-impl<'a, T: Ring> IntoIterator for &'a Mul<T> {
+impl<'a, T: RingBound> IntoIterator for &'a Mul<T> {
     type Item = &'a Term<T>;
 
     type IntoIter = std::slice::Iter<'a, Term<T>>;
@@ -110,7 +110,7 @@ impl<'a, T: Ring> IntoIterator for &'a Mul<T> {
     }
 }
 
-impl<T: Ring> Print for Mul<T> {
+impl<T: RingBound> Print for Mul<T> {
     fn print(&self, options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Print the cefficient at the beginning of the product
         if self.has_coeff() {
@@ -185,7 +185,7 @@ impl<T: Ring> Print for Mul<T> {
     }
 }
 
-impl<T: Ring> Display for Mul<T> {
+impl<T: RingBound> Display for Mul<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Print::fmt(self, &PrintOptions::default(), f)
     }

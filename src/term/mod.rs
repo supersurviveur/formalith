@@ -9,7 +9,7 @@ use std::{
 
 use crate::{
     context::{Context, Symbol},
-    field::{Group, GroupImpl, Ring, RingImpl, VectorSpaceElement, M},
+    field::{Group, GroupBound, Ring, RingBound, TryElementFrom, VectorSpaceElement, M},
     matrix::{Matrix, MatrixResult},
     polynom::MultivariatePolynomial,
     printer::{PrettyPrinter, Print, PrintOptions},
@@ -35,7 +35,7 @@ use flags::*;
 
 /// A mathematical expression.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Term<T: Group> {
+pub enum Term<T: GroupBound> {
     /// See [Value]
     Value(Value<T>),
     /// See [SymbolTerm]
@@ -50,7 +50,7 @@ pub enum Term<T: Group> {
     Fun(Box<dyn Function<T>>),
 }
 
-impl<T: Ring> std::cmp::PartialOrd for Term<T> {
+impl<T: RingBound> std::cmp::PartialOrd for Term<T> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match (self, other) {
             (Term::Value(Value { value: v1, .. }), Term::Value(Value { value: v2, .. })) => {
@@ -68,7 +68,7 @@ impl<T: Ring> std::cmp::PartialOrd for Term<T> {
     }
 }
 
-impl<T: Ring> Term<T> {
+impl<T: RingBound> Term<T> {
     /// Check if the expression is strictly positive
     pub fn is_strictly_positive(&self) -> bool {
         match PartialOrd::partial_cmp(self, &Term::zero(self.get_set())) {
@@ -93,7 +93,7 @@ impl<T: Ring> Term<T> {
     }
 }
 
-impl<T: Ring> Flags for Term<T> {
+impl<T: RingBound> Flags for Term<T> {
     fn get_flags(&self) -> u8 {
         match self {
             Term::Value(value) => value.get_flags(),
@@ -116,31 +116,31 @@ impl<T: Ring> Flags for Term<T> {
     }
 }
 
-impl<T: Ring> From<Mul<T>> for Term<T> {
+impl<T: RingBound> From<Mul<T>> for Term<T> {
     fn from(value: Mul<T>) -> Self {
         Term::Mul(value)
     }
 }
 
-impl<T: Ring> From<Add<T>> for Term<T> {
+impl<T: RingBound> From<Add<T>> for Term<T> {
     fn from(value: Add<T>) -> Self {
         Term::Add(value)
     }
 }
 
-impl<T: Ring> From<Value<T>> for Term<T> {
+impl<T: RingBound> From<Value<T>> for Term<T> {
     fn from(value: Value<T>) -> Self {
         Term::Value(value)
     }
 }
 
-impl<T: Ring> From<Pow<T>> for Term<T> {
+impl<T: RingBound> From<Pow<T>> for Term<T> {
     fn from(value: Pow<T>) -> Self {
         Term::Pow(value)
     }
 }
 
-impl<T: Ring> Term<T> {
+impl<T: RingBound> Term<T> {
     /// Absolute function
     pub const ABS: Symbol = Context::ABS;
 
@@ -190,7 +190,7 @@ impl<T: Ring> Term<T> {
     }
 }
 
-impl<T: Ring> Term<T> {
+impl<T: RingBound> Term<T> {
     /// Compare two terms
     pub fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         match (self, other) {
@@ -326,10 +326,11 @@ impl<T: Ring> Term<T> {
     }
 }
 
-impl<T: Ring> Term<M<T>>
+impl<T: RingBound> Term<M<T>>
 where
-    M<T>: Ring<Element = VectorSpaceElement<T, Matrix<TermField<T>>>>,
+    M<T>: RingBound<Element = VectorSpaceElement<T, Matrix<TermField<T>>>>,
 {
+    /// Compute the determinant of the expression.
     pub fn det(&self) -> MatrixResult<Term<T>> {
         match self {
             Term::Value(value) => match &value.value {
@@ -339,19 +340,18 @@ where
                 ))),
                 VectorSpaceElement::Vector(matrix) => Ok(matrix.det()?),
             },
-            Term::Add(add) => todo!(),
-            Term::Mul(mul) => todo!(),
-            Term::Pow(pow) => todo!(),
-            Term::Symbol(_) | Term::Fun(_) => Ok(Term::Fun(Box::new(Fun::new(
-                Context::DET,
-                vec![self.clone()],
-                self.get_set().scalar_sub_set,
-            )))),
+            Term::Add(_) | Term::Mul(_) | Term::Pow(_) | Term::Symbol(_) | Term::Fun(_) => {
+                Ok(Term::Fun(Box::new(Fun::new(
+                    Context::DET,
+                    vec![self.clone()],
+                    self.get_set().scalar_sub_set,
+                )) as Box<dyn Function<T>>))
+            }
         }
     }
 }
 
-impl<T: Ring> Term<T> {
+impl<T: RingBound> Term<T> {
     /// Try merging `other` term inside `self`. Return true if there was a merge.
     fn merge_terms(&mut self, other: &Self) -> bool {
         match (self.borrow_mut(), other) {
@@ -562,7 +562,7 @@ impl<T: Ring> Term<T> {
     fn to_pow(
         &mut self,
         base: Box<Term<T>>,
-        exposant: Box<Term<<T as GroupImpl>::ExposantSet>>,
+        exposant: Box<Term<<T as Group>::ExposantSet>>,
     ) -> &mut Pow<T> {
         *self = Term::Pow(Pow::new(base, exposant, self.get_set()));
         if let Term::Pow(n) = self {
@@ -640,7 +640,7 @@ impl<T: Ring> Term<T> {
         }
     }
 
-    /// Expand the expression
+    /// Expand the expression.
     /// ```
     /// use formalith::{field::R, parse, symbol};
     ///
@@ -652,10 +652,11 @@ impl<T: Ring> Term<T> {
         res.normalize()
     }
 
+    /// Factor the expression.
     pub fn factor(&self) -> Self
     where
+        T: TryElementFrom<TermField<T>>,
         Term<T>: TryFrom<Term<T::ExposantSet>>,
-        T::Element: TryFrom<Term<T::ExposantSet>>,
         <Term<T> as TryFrom<Term<T::ExposantSet>>>::Error: Debug,
     {
         let poly = self.to_polynomial();
@@ -739,7 +740,7 @@ impl<T: Ring> Term<T> {
 
                 Term::Pow(res)
             }
-            Term::Fun(fun) => fun.expand(),
+            Term::Fun(fun) => (**fun).expand(),
         }
     }
     /// Normalize an expression, i.e. sort sums and products, merge expressions that can be merged, remove useless expressions like zero in sums.
@@ -845,7 +846,7 @@ impl<T: Ring> Term<T> {
                 }
                 Term::Pow(Pow::new(Box::new(base), Box::new(exposant), self.get_set()))
             }
-            Term::Fun(fun) => fun.normalize(),
+            Term::Fun(fun) => (**fun).normalize(),
         };
         res = res.get_set().normalize(res);
         res.set_normalized(true);
@@ -909,7 +910,7 @@ impl<T: Ring> Term<T> {
         let (num, den) = self.as_fraction(true);
         num / den
     }
-    /// Simplify the expression by applying other simplification functions ([unify], [expand])
+    /// Simplify the expression by applying other simplification functions ([Self::unify], [Self::expand])
     pub fn simplify(&self) -> Self {
         let mut res = self.get_set().simplify(self.clone());
         let (num, den) = res.as_fraction(true);
@@ -985,12 +986,12 @@ impl<T: Ring> Term<T> {
 //     }
 // }
 
-impl<T: Ring> Display for Term<T> {
+impl<T: RingBound> Display for Term<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Print::fmt(self, &PrintOptions::default(), f)
     }
 }
-impl<T: Ring> Print for Term<T> {
+impl<T: RingBound> Print for Term<T> {
     fn print(&self, options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Term::Value(value) => Print::print(value, options, f),

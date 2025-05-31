@@ -3,7 +3,7 @@
 use std::fmt::Display;
 
 use crate::{
-    field::{Group, Ring},
+    field::{GroupBound, Ring, RingBound},
     printer::{PrettyPrinter, Print, PrintOptions},
 };
 
@@ -11,7 +11,7 @@ use super::{Flags, Term, Value};
 
 /// A sum of expressions.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Add<T: Group> {
+pub struct Add<T: GroupBound> {
     flags: u8,
     pub(crate) terms: Vec<Term<T>>,
     pub(crate) ring: T,
@@ -58,7 +58,7 @@ impl<T: Ring> Add<T> {
     }
 }
 
-impl<T: Ring> IntoIterator for Add<T> {
+impl<T: RingBound> IntoIterator for Add<T> {
     type Item = Term<T>;
 
     type IntoIter = std::vec::IntoIter<Term<T>>;
@@ -68,7 +68,7 @@ impl<T: Ring> IntoIterator for Add<T> {
     }
 }
 
-impl<'a, T: Ring> IntoIterator for &'a Add<T> {
+impl<'a, T: RingBound> IntoIterator for &'a Add<T> {
     type Item = &'a Term<T>;
 
     type IntoIter = std::slice::Iter<'a, Term<T>>;
@@ -78,7 +78,7 @@ impl<'a, T: Ring> IntoIterator for &'a Add<T> {
     }
 }
 
-impl<T: Ring> Print for Add<T> {
+impl<T: RingBound> Print for Add<T> {
     fn print(
         &self,
         options: &crate::printer::PrintOptions,
@@ -156,7 +156,7 @@ impl<T: Ring> Print for Add<T> {
     }
 }
 
-impl<T: Ring> Display for Add<T> {
+impl<T: RingBound> Display for Add<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Print::fmt(self, &PrintOptions::default(), f)
     }

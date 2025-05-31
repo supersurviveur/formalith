@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    field::{Group, Ring},
+    field::{Group, GroupBound, RingBound},
     printer::{PrettyPrinter, Print, PrintOptions},
 };
 
@@ -25,9 +25,10 @@ pub enum MatrixError {
     NotSquare,
 }
 
+/// Result type of matrix methods.
 pub type MatrixResult<T> = Result<T, MatrixError>;
 
-impl<T: Group> Matrix<T> {
+impl<T: GroupBound> Matrix<T> {
     /// Create a new matrix
     pub fn new(size: (usize, usize), data: Vec<T::Element>, ring: T) -> Self {
         Self { size, data, ring }
@@ -65,7 +66,7 @@ impl<T: Group> Matrix<T> {
     }
 }
 
-impl<T: Group> std::ops::Add<&Self> for Matrix<T> {
+impl<T: GroupBound> std::ops::Add<&Self> for Matrix<T> {
     type Output = Self;
 
     fn add(mut self, rhs: &Self) -> Self::Output {
@@ -76,7 +77,7 @@ impl<T: Group> std::ops::Add<&Self> for Matrix<T> {
     }
 }
 
-impl<T: Group> std::ops::Add for Matrix<T> {
+impl<T: GroupBound> std::ops::Add for Matrix<T> {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
@@ -84,7 +85,7 @@ impl<T: Group> std::ops::Add for Matrix<T> {
     }
 }
 
-impl<T: Group> std::ops::Add for &Matrix<T> {
+impl<T: GroupBound> std::ops::Add for &Matrix<T> {
     type Output = Matrix<T>;
 
     fn add(self, rhs: Self) -> Self::Output {
@@ -92,7 +93,7 @@ impl<T: Group> std::ops::Add for &Matrix<T> {
     }
 }
 
-impl<T: Group> std::ops::Neg for &Matrix<T> {
+impl<T: GroupBound> std::ops::Neg for &Matrix<T> {
     type Output = Matrix<T>;
 
     fn neg(self) -> Self::Output {
@@ -104,7 +105,7 @@ impl<T: Group> std::ops::Neg for &Matrix<T> {
     }
 }
 
-impl<T: Group> std::ops::Neg for Matrix<T> {
+impl<T: GroupBound> std::ops::Neg for Matrix<T> {
     type Output = Matrix<T>;
 
     fn neg(self) -> Self::Output {
@@ -112,14 +113,14 @@ impl<T: Group> std::ops::Neg for Matrix<T> {
     }
 }
 
-impl<T: Group> PartialOrd for Matrix<T> {
+impl<T: GroupBound> PartialOrd for Matrix<T> {
     fn partial_cmp(&self, _: &Self) -> Option<std::cmp::Ordering> {
         // There is no order over matrix
         None
     }
 }
 
-impl<T: Group> Print for Matrix<T> {
+impl<T: GroupBound> Print for Matrix<T> {
     fn print(
         &self,
         options: &crate::printer::PrintOptions,
@@ -195,13 +196,13 @@ impl<T: Group> Print for Matrix<T> {
     }
 }
 
-impl<T: Ring> Display for Matrix<T> {
+impl<T: RingBound> Display for Matrix<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Print::fmt(self, &PrintOptions::default(), f)
     }
 }
 
-impl<T: Ring> Matrix<T> {
+impl<T: RingBound> Matrix<T> {
     /// Transform the matrix in place in row reduced echelon form.
     pub fn row_reduce(&mut self) {
         self.partial_row_reduce();
@@ -256,7 +257,7 @@ impl<T: Ring> Matrix<T> {
     }
 }
 
-impl<T: Ring> Matrix<T> {
+impl<T: RingBound> Matrix<T> {
     /// Transforn the matrix in place in row echelon form, returning its rank.
     pub fn partial_row_reduce(&mut self) -> usize {
         let (rows, cols) = self.size;
@@ -351,7 +352,7 @@ impl<T: Ring> Matrix<T> {
     }
 }
 
-impl<T: Ring> Index<usize> for Matrix<T> {
+impl<T: RingBound> Index<usize> for Matrix<T> {
     type Output = T::Element;
 
     #[inline]
@@ -360,14 +361,14 @@ impl<T: Ring> Index<usize> for Matrix<T> {
     }
 }
 
-impl<T: Ring> IndexMut<usize> for Matrix<T> {
+impl<T: RingBound> IndexMut<usize> for Matrix<T> {
     #[inline]
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.data[index]
     }
 }
 
-impl<T: Ring> Index<(usize, usize)> for Matrix<T> {
+impl<T: RingBound> Index<(usize, usize)> for Matrix<T> {
     type Output = T::Element;
 
     /// Get the `i`th row and `j`th column of the matrix, where `index=(i,j)`.
@@ -377,7 +378,7 @@ impl<T: Ring> Index<(usize, usize)> for Matrix<T> {
     }
 }
 
-impl<T: Ring> IndexMut<(usize, usize)> for Matrix<T> {
+impl<T: RingBound> IndexMut<(usize, usize)> for Matrix<T> {
     /// Get the `i`th row and `j`th column of the matrix, where `index=(i,j)`.
     #[inline]
     fn index_mut(&mut self, index: (usize, usize)) -> &mut Self::Output {
