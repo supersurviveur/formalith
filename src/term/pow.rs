@@ -3,7 +3,7 @@
 use std::{fmt::Display, mem::ManuallyDrop};
 
 use crate::{
-    field::{Group, Ring},
+    field::{GroupBound, RingBound},
     printer::{Print, PrintOptions},
 };
 
@@ -11,7 +11,7 @@ use super::{Flags, Term};
 
 /// A product of expressions.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Pow<T: Group> {
+pub struct Pow<T: GroupBound> {
     flags: u8,
     pub(crate) base: Box<Term<T>>,
     /// `ManuallyDrop` is used to avoid drop-checking which fails for infinite type `T::ExposantSet::ExposantSet::...`
@@ -19,7 +19,7 @@ pub struct Pow<T: Group> {
     pub(crate) set: T,
 }
 
-impl<T: Ring> Flags for Pow<T> {
+impl<T: RingBound> Flags for Pow<T> {
     fn get_flags(&self) -> u8 {
         self.flags
     }
@@ -28,7 +28,7 @@ impl<T: Ring> Flags for Pow<T> {
     }
 }
 
-impl<T: Ring> Pow<T> {
+impl<T: RingBound> Pow<T> {
     /// Create a new pow expression
     pub fn new<E: Into<Box<Term<T>>>, F: Into<Box<Term<T::ExposantSet>>>>(
         base: E,
@@ -44,7 +44,7 @@ impl<T: Ring> Pow<T> {
     }
 }
 
-impl<T: Group> Drop for Pow<T> {
+impl<T: GroupBound> Drop for Pow<T> {
     fn drop(&mut self) {
         unsafe {
             ManuallyDrop::drop(&mut self.exposant);
@@ -52,7 +52,7 @@ impl<T: Group> Drop for Pow<T> {
     }
 }
 
-impl<T: Ring> Print for Pow<T> {
+impl<T: RingBound> Print for Pow<T> {
     fn print(&self, options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Self::group(&self.base, options, f)?;
         Self::operator("^", options, f)?;
@@ -96,7 +96,7 @@ impl<T: Ring> Print for Pow<T> {
         }
     }
 }
-impl<T: Ring> Display for Pow<T> {
+impl<T: RingBound> Display for Pow<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Print::fmt(self, &PrintOptions::default(), f)
     }

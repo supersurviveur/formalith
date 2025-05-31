@@ -6,7 +6,7 @@ use std::iter::Peekable;
 use std::ops::Range;
 
 use crate::context::{Context, Symbol};
-use crate::field::{Ring, M};
+use crate::field::{RingBound, M};
 use crate::term::{Fun, SymbolTerm, Term, Value};
 
 use super::lexer::{Lexer, Token, TokenKind};
@@ -47,7 +47,7 @@ impl Error for ParserError {}
 
 impl Display for ParserError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
+        write!(f, "{}", self.message)
     }
 }
 
@@ -79,7 +79,8 @@ impl<'a> Parser<'a> {
     }
 }
 
-pub trait ParserTrait<E: Ring> {
+/// Trait used by parser to implement some methods with specialization.
+pub trait ParserTrait<E: RingBound> {
     /// Parse an expression, which can be a literal, a sum, a group ()...
     fn parse_expression(&mut self, priority: usize, set: E)
         -> Result<Option<Term<E>>, ParserError>;
@@ -141,14 +142,14 @@ impl Parser<'_> {
         }
     }
     /// Parse the parser's string, returning the parsed mathematical expression.
-    pub fn parse<E: Ring>(&mut self, set: E) -> Result<Term<E>, ParserError> {
+    pub fn parse<E: RingBound>(&mut self, set: E) -> Result<Term<E>, ParserError> {
         Ok(self
             .parse_expression(0, set)?
             .ok_or(ParserError::new("Input was empty".into()))?
             .normalize())
     }
 
-    fn parse_symbol<E: Ring>(&mut self, set: E) -> Result<Option<Term<E>>, ParserError> {
+    fn parse_symbol<E: RingBound>(&mut self, set: E) -> Result<Option<Term<E>>, ParserError> {
         match &self.token.kind {
             TokenKind::Ident(sym) => {
                 let tmp = sym.clone();
@@ -158,7 +159,7 @@ impl Parser<'_> {
             _ => Ok(None),
         }
     }
-    fn parse_group<E: Ring>(&mut self, set: E) -> Result<Option<Term<E>>, ParserError> {
+    fn parse_group<E: RingBound>(&mut self, set: E) -> Result<Option<Term<E>>, ParserError> {
         match &self.token.kind {
             TokenKind::OpenParen => {
                 self.next_token();
@@ -170,7 +171,7 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_args<U: Ring>(&mut self, arg_set: U) -> Result<Vec<Term<U>>, ParserError> {
+    fn parse_args<U: RingBound>(&mut self, arg_set: U) -> Result<Vec<Term<U>>, ParserError> {
         let mut args = vec![];
         args.push(self.parse_expression(0, arg_set)?.unwrap());
         while self.token.kind == TokenKind::Comma {
@@ -181,7 +182,7 @@ impl Parser<'_> {
     }
 }
 
-impl<E: Ring> ParserTrait<M<M<M<E>>>> for Parser<'_> {
+impl<E: RingBound> ParserTrait<M<M<M<E>>>> for Parser<'_> {
     fn parse_expression(
         &mut self,
         _: usize,
@@ -192,7 +193,7 @@ impl<E: Ring> ParserTrait<M<M<M<E>>>> for Parser<'_> {
         ))
     }
 }
-impl<E: Ring> ParserTrait<E> for Parser<'_> {
+impl<E: RingBound> ParserTrait<E> for Parser<'_> {
     default fn parse_expression(
         &mut self,
         priority: usize,
@@ -252,7 +253,7 @@ impl<E: Ring> ParserTrait<E> for Parser<'_> {
     }
 }
 impl Parser<'_> {
-    fn parse_binary_expr<E: Ring>(
+    fn parse_binary_expr<E: RingBound>(
         &mut self,
         current: Term<E>,
         op: Op,
@@ -277,7 +278,7 @@ impl Parser<'_> {
         Ok((current, false))
     }
 
-    fn parse_literal<E: Ring>(&mut self, set: E) -> Result<Option<Term<E>>, ParserError> {
+    fn parse_literal<E: RingBound>(&mut self, set: E) -> Result<Option<Term<E>>, ParserError> {
         let content = &self.input[self.span()];
         match &self.token.kind {
             TokenKind::Literal { .. } => {
@@ -292,7 +293,7 @@ impl Parser<'_> {
             _ => Ok(None),
         }
     }
-    fn parse_unary<E: Ring>(
+    fn parse_unary<E: RingBound>(
         &mut self,
         priority: usize,
         set: E,
@@ -307,7 +308,7 @@ impl Parser<'_> {
     }
 }
 
-/// Try parsing the given input inside the given set, returning a `Result`. See [parse].
+/// Try parsing the given input inside the given set, returning a `Result`. See [crate::parse].
 #[macro_export(local_inner_macros)]
 macro_rules! try_parse {
     ( $x:expr, $f:expr ) => {

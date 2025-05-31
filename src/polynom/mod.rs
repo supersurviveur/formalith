@@ -7,23 +7,28 @@ use std::{
 };
 
 use crate::{
-    field::{Group, Ring},
+    field::{GroupBound, RingBound, TryElementFrom},
     printer::{PrettyPrinter, Print, PrintOptions},
     term::Term,
 };
 
+/// Types must implement this trait to be used as variables inside polynomials.
+///
+/// Auto implemented.
 pub trait Monomial: Debug + Clone + PartialEq + Eq + Hash + PartialOrd + Print {}
 
 impl<T: Debug + Clone + PartialEq + Eq + Hash + PartialOrd + Print> Monomial for T {}
 
+/// A multivariate polynomial, living in `T` with exposant in `U`. Variables can be any type implementing [Monomial], like [crate::context::Symbol] or [Term].
 #[derive(Debug, Clone, PartialEq, Hash)]
-pub struct MultivariatePolynomial<V: Monomial, T: Group, U: Group> {
+pub struct MultivariatePolynomial<V: Monomial, T: GroupBound, U: GroupBound> {
     terms: Vec<(Vec<(V, U::Element)>, T::Element)>,
     set: T,
     exposant_set: U,
 }
 
-impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
+impl<V: Monomial, T: RingBound, U: RingBound> MultivariatePolynomial<V, T, U> {
+    /// Create a new polynomial from its terms and sets.
     pub fn new(terms: Vec<(Vec<(V, U::Element)>, T::Element)>, set: T, exposant_set: U) -> Self {
         Self {
             terms,
@@ -31,11 +36,12 @@ impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
             exposant_set,
         }
     }
-    /// Check if the polynom is a constant
+    /// Check if the polynom is a constant.
     pub fn is_constant(&self) -> bool {
         self.terms.len() == 1 && self.terms[0].0.is_empty()
     }
 
+    /// Create a new constant polynomial.
     pub fn constant(coeff: T::Element, set: T, exposant_set: U) -> Self {
         Self {
             terms: vec![(vec![], coeff)],
@@ -44,6 +50,7 @@ impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
         }
     }
 
+    /// Create a new monomial containing `var`.
     pub fn variable(var: V, set: T, exposant_set: U) -> Self {
         Self {
             terms: vec![(vec![(var, exposant_set.one())], set.one())],
@@ -57,12 +64,9 @@ impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
         self.is_constant() && self.set.is_one(&self.terms[0].1)
     }
 
+    /// Create a new constant polynomial equal to one.
     pub fn one(set: T, exposant_set: U) -> Self {
-        Self {
-            terms: vec![(vec![], set.one())],
-            set,
-            exposant_set,
-        }
+        Self::constant(set.one(), set, exposant_set)
     }
 
     /// Check if the polynom is the constant 1
@@ -70,12 +74,9 @@ impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
         self.terms.is_empty() || self.terms.iter().all(|(_, c)| self.set.is_zero(c))
     }
 
+    /// Create a new constant polynomial equal to zero.
     pub fn zero(set: T, exposant_set: U) -> Self {
-        Self {
-            terms: vec![(vec![], set.zero())],
-            set,
-            exposant_set,
-        }
+        Self::constant(set.zero(), set, exposant_set)
     }
 
     fn combine_vars(
@@ -145,11 +146,11 @@ impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
     }
 }
 
-impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {}
+impl<V: Monomial, T: RingBound, U: RingBound> MultivariatePolynomial<V, T, U> {}
 
-impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U>
+impl<V: Monomial, T: RingBound, U: RingBound> MultivariatePolynomial<V, T, U>
 where
-    T::Element: TryFrom<U::Element>,
+    T: TryElementFrom<U>,
     V: TryFrom<U::Element>,
     <V as TryFrom<U::Element>>::Error: Debug,
 {
@@ -163,10 +164,11 @@ where
                 if v == var {
                     let new_exp = self.exposant_set.sub(exp, &self.exposant_set.one());
                     let new_coeff = if let Ok(new_coeff) =
-                        T::Element::try_from(exp.clone()).map(|c| self.set.mul(coeff, &c))
+                        T::try_from_element(exp.clone()).map(|c| self.set.mul(coeff, &c))
                     {
                         new_coeff
                     } else {
+                        println!("{:?}", self.set);
                         // Convert exponent to variable
                         terms.push((
                             vec![(
@@ -199,7 +201,7 @@ where
     }
 }
 
-impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U>
+impl<V: Monomial, T: RingBound, U: RingBound> MultivariatePolynomial<V, T, U>
 where
     U::Element: Ord,
 {
@@ -218,7 +220,7 @@ where
             .unwrap_or(self.exposant_set.zero())
     }
 }
-impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
+impl<V: Monomial, T: RingBound, U: RingBound> MultivariatePolynomial<V, T, U> {
     /// Create a polynom from a hashmap which associate monomial to its coefficient
     fn from_term_map(
         map: HashMap<Vec<(V, U::Element)>, T::Element>,
@@ -368,7 +370,7 @@ impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
     }
 }
 
-impl<V: Monomial, T: Ring, U: Ring> std::ops::Add for &MultivariatePolynomial<V, T, U> {
+impl<V: Monomial, T: RingBound, U: RingBound> std::ops::Add for &MultivariatePolynomial<V, T, U> {
     type Output = MultivariatePolynomial<V, T, U>;
 
     fn add(self, rhs: Self) -> Self::Output {
@@ -391,7 +393,7 @@ impl<V: Monomial, T: Ring, U: Ring> std::ops::Add for &MultivariatePolynomial<V,
     }
 }
 
-impl<V: Monomial, T: Ring, U: Ring> std::ops::Add for MultivariatePolynomial<V, T, U> {
+impl<V: Monomial, T: RingBound, U: RingBound> std::ops::Add for MultivariatePolynomial<V, T, U> {
     type Output = MultivariatePolynomial<V, T, U>;
 
     fn add(self, rhs: Self) -> Self::Output {
@@ -399,7 +401,9 @@ impl<V: Monomial, T: Ring, U: Ring> std::ops::Add for MultivariatePolynomial<V, 
     }
 }
 
-impl<V: Monomial, T: Ring, U: Ring> std::ops::Add<&Self> for MultivariatePolynomial<V, T, U> {
+impl<V: Monomial, T: RingBound, U: RingBound> std::ops::Add<&Self>
+    for MultivariatePolynomial<V, T, U>
+{
     type Output = MultivariatePolynomial<V, T, U>;
 
     fn add(self, rhs: &Self) -> Self::Output {
@@ -407,7 +411,7 @@ impl<V: Monomial, T: Ring, U: Ring> std::ops::Add<&Self> for MultivariatePolynom
     }
 }
 
-impl<V: Monomial, T: Ring, U: Ring> std::ops::Mul for &MultivariatePolynomial<V, T, U> {
+impl<V: Monomial, T: RingBound, U: RingBound> std::ops::Mul for &MultivariatePolynomial<V, T, U> {
     type Output = MultivariatePolynomial<V, T, U>;
 
     fn mul(self, rhs: Self) -> Self::Output {
@@ -434,7 +438,7 @@ impl<V: Monomial, T: Ring, U: Ring> std::ops::Mul for &MultivariatePolynomial<V,
     }
 }
 
-impl<V: Monomial, T: Ring, U: Ring> std::ops::Mul for MultivariatePolynomial<V, T, U> {
+impl<V: Monomial, T: RingBound, U: RingBound> std::ops::Mul for MultivariatePolynomial<V, T, U> {
     type Output = MultivariatePolynomial<V, T, U>;
 
     fn mul(self, rhs: Self) -> Self::Output {
@@ -442,7 +446,9 @@ impl<V: Monomial, T: Ring, U: Ring> std::ops::Mul for MultivariatePolynomial<V, 
     }
 }
 
-impl<V: Monomial, T: Ring, U: Ring> std::ops::Mul<&Self> for MultivariatePolynomial<V, T, U> {
+impl<V: Monomial, T: RingBound, U: RingBound> std::ops::Mul<&Self>
+    for MultivariatePolynomial<V, T, U>
+{
     type Output = MultivariatePolynomial<V, T, U>;
 
     fn mul(self, rhs: &Self) -> Self::Output {
@@ -450,7 +456,7 @@ impl<V: Monomial, T: Ring, U: Ring> std::ops::Mul<&Self> for MultivariatePolynom
     }
 }
 
-impl<V: Monomial, T: Ring, U: Ring> std::ops::Sub for &MultivariatePolynomial<V, T, U> {
+impl<V: Monomial, T: RingBound, U: RingBound> std::ops::Sub for &MultivariatePolynomial<V, T, U> {
     type Output = MultivariatePolynomial<V, T, U>;
 
     fn sub(self, rhs: Self) -> Self::Output {
@@ -474,16 +480,20 @@ impl<V: Monomial, T: Ring, U: Ring> std::ops::Sub for &MultivariatePolynomial<V,
     }
 }
 
-impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U>
+impl<V: Monomial, T: RingBound, U: RingBound> MultivariatePolynomial<V, T, U>
 where
-    T::Element: TryFrom<U::Element>,
+    T: TryElementFrom<U>,
     V: TryFrom<U::Element>,
     <V as TryFrom<U::Element>>::Error: Debug,
 {
+    /// Factor the polynomial, returning factors as `(factor, multiplicity)`
+    ///
+    /// Incomplete implementation !!!
     pub fn factor(&self) -> Vec<(Self, u32)> {
         self.square_free_factorization()
         // TODO add cantor-zassenhaus or/and tragger algorithm
     }
+    /// Return square free factors as `(factor, multiplicity)`
     pub fn square_free_factorization(&self) -> Vec<(Self, u32)> {
         let mut factors = Vec::new();
 
@@ -542,9 +552,26 @@ where
     }
 }
 
-impl<V: Monomial + Print, T: Ring, U: Ring> Print for MultivariatePolynomial<V, T, U> {
+impl<V: Monomial + Print, T: RingBound, U: RingBound> Print for MultivariatePolynomial<V, T, U> {
     fn print(&self, options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
+        for (j, (vars, coeff)) in self.terms.iter().enumerate() {
+            let has_coeff = !self.set.is_one(coeff) || vars.is_empty();
+            write!(f, "{coeff}")?;
+
+            for (i, (var, exposant)) in vars.iter().enumerate() {
+                if i == 0 && !has_coeff {
+                } else {
+                    write!(f, "*")?
+                }
+                var.print(options, f)?;
+                write!(f, "^")?;
+                write!(f, "{exposant}")?;
+            }
+            if j != self.terms.len() - 1 {
+                write!(f, "+")?;
+            }
+        }
+        Ok(())
     }
 
     fn pretty_print(&self, options: &PrintOptions) -> PrettyPrinter {
@@ -570,7 +597,7 @@ impl<V: Monomial + Print, T: Ring, U: Ring> Print for MultivariatePolynomial<V, 
     }
 }
 
-impl<V: Monomial + Print, T: Ring, U: Ring> Display for MultivariatePolynomial<V, T, U> {
+impl<V: Monomial + Print, T: RingBound, U: RingBound> Display for MultivariatePolynomial<V, T, U> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Print::fmt(self, &PrintOptions::default(), f)
     }

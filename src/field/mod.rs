@@ -16,13 +16,13 @@ pub use commons::*;
 /// - `+` is associative
 /// - `*` has an identity element `zero`
 /// - Every element has an inverse element
-pub trait GroupImpl: Clone + Copy + fmt::Debug + PartialEq + Eq + Hash + 'static {
+pub trait Group: Clone + Copy + fmt::Debug + PartialEq + Eq + Hash + 'static {
     /// The type of the elements living in this group
     type Element: Clone + fmt::Debug + fmt::Display + PartialEq + Eq + PartialOrd + Hash;
 
-    /// The set where exposants live. Mostly [commons::Z], but it can be any ring,
+    /// The set where exposants live. Mostly [const@commons::Z], but it can be any ring,
     /// like [const@R] for real numbers since power is not only a notation for `x*x*...*x` but a defined operation.
-    type ExposantSet: GroupImpl;
+    type ExposantSet: Group;
 
     /// Get the exposant set for this group
     fn get_exposant_set(&self) -> Self::ExposantSet;
@@ -70,27 +70,35 @@ pub trait GroupImpl: Clone + Copy + fmt::Debug + PartialEq + Eq + Hash + 'static
     fn pretty_print(&self, elem: &Self::Element, options: &PrintOptions) -> PrettyPrinter;
 }
 
-pub trait Group: GroupImpl<ExposantSet: GroupImpl<ExposantSet = Self::ExposantSet>> {}
-impl<T: GroupImpl<ExposantSet: GroupImpl<ExposantSet = Self::ExposantSet>>> Group for T {}
-pub trait Ring: RingImpl<ExposantSet: RingImpl<ExposantSet = Self::ExposantSet>> {}
-impl<T: RingImpl<ExposantSet: RingImpl<ExposantSet = Self::ExposantSet>>> Ring for T {}
+/// [Group] trait with additional bounds, limiting exposant set recursion depth.
+///
+/// Auto implemented.
+pub trait GroupBound: Group<ExposantSet: Group<ExposantSet = Self::ExposantSet>> {}
+impl<T: Group<ExposantSet: Group<ExposantSet = Self::ExposantSet>>> GroupBound for T {}
 
-pub trait TryElementCast<T: GroupImpl>: GroupImpl {
-    fn downcast_element(value: T::Element) -> Result<Self::Element, TryCastError>;
-    fn upcast_element(value: Self::Element) -> Result<T::Element, TryCastError>;
+/// Same as [GroupBound] for [Ring] trait.
+///
+/// Auto implemented.
+pub trait RingBound: Ring<ExposantSet: Ring> {}
+impl<T: Ring<ExposantSet: Ring>> RingBound for T {}
+
+/// Trait to cast an element from a set to another set.
+pub trait TryElementFrom<T: Group>: Group {
+    /// Try to convert an element of the set T into an element of the set E.
+    fn try_from_element(value: T::Element) -> Result<Self::Element, TryCastError>;
 }
 
-impl<T: GroupImpl, U: GroupImpl> TryElementCast<T> for U {
-    default fn downcast_element(
-        value: <T as GroupImpl>::Element,
-    ) -> Result<Self::Element, TryCastError> {
-        todo!()
+// Auto implement for every groups
+impl<T: Group, U: Group> TryElementFrom<T> for U {
+    default fn try_from_element(_: T::Element) -> Result<Self::Element, TryCastError> {
+        Err(TryCastError("Cast unimplemented"))
     }
+}
 
-    default fn upcast_element(
-        value: Self::Element,
-    ) -> Result<<T as GroupImpl>::Element, TryCastError> {
-        todo!()
+// Specialize for T to T
+impl<T: Group> TryElementFrom<T> for T {
+    fn try_from_element(value: T::Element) -> Result<Self::Element, TryCastError> {
+        Ok(value)
     }
 }
 
@@ -98,7 +106,7 @@ impl<T: GroupImpl, U: GroupImpl> TryElementCast<T> for U {
 /// - `*` is associative
 /// - `*` has an identity element `one`
 /// - `*` is distributive over `+`
-pub trait RingImpl: Group {
+pub trait Ring: GroupBound {
     /// Get the one (aka identity element for `*`) of this group
     fn one(&self) -> Self::Element;
     /// Check if a number is one.
@@ -129,8 +137,8 @@ pub trait RingImpl: Group {
     ///Custom parsing function, to parse element specific to this group. Check [commons::M::parse_expression] for example.
     fn parse_expression(&self, _parser: &mut Parser) -> Result<Option<Term<Self>>, ParserError>
     where
-        Self: Group,
-        Self::ExposantSet: Ring,
+        Self: GroupBound,
+        Self::ExposantSet: RingBound,
     {
         Ok(None)
     }
@@ -138,8 +146,8 @@ pub trait RingImpl: Group {
     /// Normalize a mathematical expression using rules specific to this group. Check [commons::R::normalize]
     fn normalize(&self, a: Term<Self>) -> Term<Self>
     where
-        Self: Group,
-        Self::ExposantSet: Ring,
+        Self: GroupBound,
+        Self::ExposantSet: RingBound,
     {
         a
     }
@@ -147,8 +155,8 @@ pub trait RingImpl: Group {
     /// Expand a mathematical expression using rules specific to this group. Check [commons::M::expand]
     fn expand(&self, a: Term<Self>) -> Term<Self>
     where
-        Self: Group,
-        Self::ExposantSet: Ring,
+        Self: GroupBound,
+        Self::ExposantSet: RingBound,
     {
         a
     }
@@ -156,8 +164,8 @@ pub trait RingImpl: Group {
     /// Simplify a mathematical expression using rules specific to this group. Check [commons::M::simplify]
     fn simplify(&self, a: Term<Self>) -> Term<Self>
     where
-        Self: Group,
-        Self::ExposantSet: Ring,
+        Self: GroupBound,
+        Self::ExposantSet: RingBound,
     {
         a
     }
@@ -165,8 +173,8 @@ pub trait RingImpl: Group {
     /// Get associated term field
     fn get_term_field(&self) -> TermField<Self>
     where
-        Self: Group,
-        Self::ExposantSet: Ring,
+        Self: GroupBound,
+        Self::ExposantSet: RingBound,
     {
         TermField::new(*self)
     }
@@ -174,43 +182,24 @@ pub trait RingImpl: Group {
     /// Get associated matrix ring
     fn get_matrix_ring(&self) -> M<Self>
     where
-        Self: Group,
-        Self::ExposantSet: Ring,
+        Self: GroupBound,
+        Self::ExposantSet: RingBound,
     {
         M::new(*self)
     }
 }
 
-/// Trait to downcast an expression from a set to another set.
-///
-/// It use horrible generic types to work, to avoid issues with infinite type with exposant set.
-/// The hack is to allow only a fixed amount of exposant set (currently 3) that are not their own exposant set (for instance exposant set of R is R).
-/// That way there is only a finite number of sets that can be converted.
-/// This limit can be enlarged by adding more templating, but most set have an exposant set which is already cycling.
-pub trait TryExprCast<From: Ring>: Ring {
+/// Trait to cast an expression from a set to another set.
+pub trait TryExprFrom<From: Ring>: Ring {
     /// Try to convert an expression over the set T into an expression over the set E.
-    ///
-    /// See [Downcast] to understand the templating.
-    fn downcast_expr(&self, value: Term<From>) -> Result<Term<Self>, TryCastError>;
-    fn upcast_expr(set: From, value: Term<Self>) -> Result<Term<From>, TryCastError>;
+    fn try_from_expr(&self, value: Term<From>) -> Result<Term<Self>, TryCastError>;
 }
 
-impl<From: Ring, To: Ring> TryExprCast<From> for To
-where
-    Self: TryElementCast<From>,
-    Self::ExposantSet: TryElementCast<From::ExposantSet>,
-    <Self::ExposantSet as GroupImpl>::ExposantSet:
-        TryElementCast<<From::ExposantSet as GroupImpl>::ExposantSet>,
-    <Self::ExposantSet as GroupImpl>::ExposantSet:
-        Group<ExposantSet = <Self::ExposantSet as GroupImpl>::ExposantSet>,
-    <From::ExposantSet as GroupImpl>::ExposantSet:
-        Group<ExposantSet = <From::ExposantSet as GroupImpl>::ExposantSet>,
-{
-    fn downcast_expr(&self, value: Term<From>) -> Result<Term<Self>, TryCastError> {
+impl<From: RingBound, To: RingBound> TryExprFrom<From> for To {
+    fn try_from_expr(&self, value: Term<From>) -> Result<Term<Self>, TryCastError> {
         match value {
             Term::Value(value) => Ok(Term::Value(Value::new(
-                <Self as TryElementCast<From>>::downcast_element(value.value)
-                    .map_err(|_| TryCastError())?,
+                <Self as TryElementFrom<From>>::try_from_element(value.value)?,
                 *self,
             ))),
             Term::Symbol(symbol_term) => {
@@ -219,7 +208,7 @@ where
             Term::Add(add) => Ok(Add::new(
                 add.terms
                     .into_iter()
-                    .map(|x| self.downcast_expr(x))
+                    .map(|x| self.try_from_expr(x))
                     .collect::<Result<Vec<_>, _>>()?,
                 *self,
             )
@@ -227,16 +216,16 @@ where
             Term::Mul(mul) => Ok(Mul::new(
                 mul.factors
                     .into_iter()
-                    .map(|x| self.downcast_expr(x))
+                    .map(|x| self.try_from_expr(x))
                     .collect::<Result<Vec<_>, _>>()?,
                 *self,
             )
             .into()),
             Term::Pow(pow) => Ok(Pow::new(
-                Box::new(self.downcast_expr((*pow.base).clone())?),
+                Box::new(self.try_from_expr((*pow.base).clone())?),
                 Box::new(
                     self.get_exposant_set()
-                        .downcast_expr((**pow.exposant).clone())?,
+                        .try_from_expr((**pow.exposant).clone())?,
                 ),
                 *self,
             )
@@ -244,58 +233,24 @@ where
             Term::Fun(_) => {
                 // Function can't be converted. Maybe with constraints we can check if some conversions are possible,
                 // and then use a FunctionWrapper struct implementing Function trait to acheive the "conversion"
-                Err(TryCastError())
+                Err(TryCastError("Can't cast function"))
             }
-        }
-    }
-
-    fn upcast_expr(set: From, value: Term<Self>) -> Result<Term<From>, TryCastError> {
-        match value {
-            Term::Value(value) => Ok(Term::Value(Value::new(
-                <Self as TryElementCast<From>>::upcast_element(value.value)
-                    .map_err(|_| TryCastError())?,
-                set,
-            ))),
-            Term::Symbol(symbol_term) => Ok(Term::Symbol(SymbolTerm::new(symbol_term.symbol, set))),
-            Term::Add(add) => Ok(Add::new(
-                add.terms
-                    .into_iter()
-                    .map(|x| Self::upcast_expr(set, x))
-                    .collect::<Result<Vec<_>, _>>()?,
-                set,
-            )
-            .into()),
-            Term::Mul(mul) => Ok(Mul::new(
-                mul.factors
-                    .into_iter()
-                    .map(|x| Self::upcast_expr(set, x))
-                    .collect::<Result<Vec<_>, _>>()?,
-                set,
-            )
-            .into()),
-            Term::Pow(pow) => Ok(Pow::new(
-                Box::new(Self::upcast_expr(set, (*pow.base).clone())?),
-                Box::new(Self::ExposantSet::upcast_expr(
-                    set.get_exposant_set(),
-                    (**pow.exposant).clone(),
-                )?),
-                set,
-            )
-            .into()),
-            Term::Fun(_) => Err(TryCastError()),
         }
     }
 }
 
 /// An euclidean ring is a [Ring] TODO
-pub trait EuclideanRing: Ring {
+pub trait EuclideanRing: RingBound {
+    /// Return the remainder of the euclidean division of a by b.
     fn rem(&self, a: &Self::Element, b: &Self::Element) -> Self::Element;
+    /// Compute the euclidean division of a by b, returning (quotient, remainder).
     fn quot_rem(&self, a: &Self::Element, b: &Self::Element) -> (Self::Element, Self::Element);
+    /// Compute the greatest common divisor of a and b.
     fn gcd(&self, a: &Self::Element, b: &Self::Element) -> Self::Element;
 }
 
 /// A field is a [Ring] TODO
-pub trait Field: Ring {
+pub trait Field: RingBound {
     /// Compute the inverse element of a.
     fn inv(&self, a: &Self::Element) -> Self::Element {
         self.try_inv(a)
@@ -304,7 +259,7 @@ pub trait Field: Ring {
 }
 
 /// TODO
-pub trait Derivable: Ring {
+pub trait Derivable: RingBound {
     /// TODO rework derivative system
     fn derivative(&self, expr: &Self::Element, x: Symbol) -> Self::Element;
 }

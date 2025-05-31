@@ -3,7 +3,7 @@
 use std::cmp::Ordering;
 
 use crate::{
-    field::{Field, Group, GroupImpl, Ring, RingImpl},
+    field::{Field, GroupBound, Group, RingBound, Ring},
     printer::Print,
 };
 
@@ -11,9 +11,9 @@ use super::{Term, Value};
 
 /// A ring where constants are complete expressions, like `2*x^2`. It is usefull for matrix and polynoms, to allow expressions inside coefficients.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct TermField<T: Group>(T);
+pub struct TermField<T: GroupBound>(T);
 
-impl<T: Group> TermField<T> {
+impl<T: GroupBound> TermField<T> {
     /// Create a new term field for the set `T`
     pub const fn new(ring: T) -> Self {
         Self(ring)
@@ -24,7 +24,7 @@ impl<T: Group> TermField<T> {
     }
 }
 
-impl<T: Ring> GroupImpl for TermField<T> {
+impl<T: RingBound> Group for TermField<T> {
     type Element = Term<T>;
 
     type ExposantSet = Self;
@@ -65,7 +65,7 @@ impl<T: Ring> GroupImpl for TermField<T> {
     }
 }
 
-impl<T: Ring> RingImpl for TermField<T> {
+impl<T: RingBound> Ring for TermField<T> {
     fn one(&self) -> Self::Element {
         Term::Value(Value::new(self.get_set().one(), self.get_set()))
     }

@@ -17,7 +17,7 @@ pub trait Flags {
     fn remove_flag(&mut self, flag: u8) {
         *self.get_flags_mut() &= !flag;
     }
-    /// If `normalized` is `true`, set the expression as already normalized (see [Term::normalize])
+    /// If `normalized` is `true`, set the expression as already normalized (see [crate::term::Term::normalize])
     fn set_normalized(&mut self, normalized: bool) {
         if normalized {
             self.add_flag(NORMALIZED);

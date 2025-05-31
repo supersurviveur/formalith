@@ -1,10 +1,12 @@
+#![allow(unused)]
+
 use formalith::{
-    field::{TryElementCast, M, R, Z},
+    field::{M, R},
     parse,
     polynom::MultivariatePolynomial,
     symbol,
 };
-use malachite::{rational::Rational, Integer};
+use malachite::rational::Rational;
 
 pub fn main() {
     println!("{}", parse!("(x+y)^4", R).expand());

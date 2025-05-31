@@ -9,35 +9,65 @@ use owo_colors::colors::Cyan;
 
 use crate::{
     context::{Context, Symbol},
-    field::{Group, Ring},
+    field::{GroupBound, RingBound},
     printer::{PrettyPrinter, Print, PrintOptions},
 };
 
 use super::{Flags, Term};
 
-pub trait Function<T: Group>: Debug + DynClone + DynEq + DynHash + Flags + Print {
+/// To allow function from any set to the set `T`, a dynamic dispatch is used with this trait, implementing needed methods.
+///
+/// See [Fun] for a structure implementing this trait.
+pub trait Function<T: GroupBound>: Debug + DynClone + DynEq + DynHash + Flags + Print {
+    /// Normalize arguments of the function.
     fn normalize(&self) -> Term<T>;
+    /// Expand arguments of the function.
     fn expand(&self) -> Term<T>;
+    /// Get the set where the function lives.
     fn get_set(&self) -> T;
+    /// Get the identifier of the function.
+    fn get_ident(&self) -> Symbol;
+    /// Get the identifier of the function as a string.
+    fn get_ident_as_str(&self) -> &str {
+        Context::get_symbol_data(&self.get_ident()).name.as_str()
+    }
 }
 
-impl<From: Ring, T: Ring> Function<T> for Fun<From, T> {
+impl<T: GroupBound> dyn Function<T> {
+    /// Try to get arguments of the function in set `From`
+    pub fn get_args<From: GroupBound>(&self) -> Option<&Vec<Term<From>>> {
+        self.as_any()
+            .downcast_ref::<Fun<From, T>>()
+            .map(|fun| &fun.args)
+    }
+    /// Try to get first argument of the function in set `From`
+    pub fn get_arg<From: GroupBound>(&self) -> Option<&Term<From>> {
+        self.as_any()
+            .downcast_ref::<Fun<From, T>>()
+            .map(|fun| fun.args.first())?
+    }
+}
+
+impl<From: RingBound, T: RingBound> Function<T> for Fun<From, T> {
     fn normalize(&self) -> Term<T> {
         let mut new_args = vec![];
         for arg in &self.args {
             new_args.push(arg.normalize());
         }
-        Term::Fun(Box::new(Fun::new(self.ident, new_args, self.set)))
+        Term::Fun(Box::new(Fun::new(self.ident, new_args, self.set)) as Box<dyn Function<T>>)
     }
     fn expand(&self) -> Term<T> {
         let mut new_args = vec![];
         for arg in &self.args {
             new_args.push(arg.expand());
         }
-        Term::Fun(Box::new(Fun::new(self.ident, new_args, self.set)))
+        Term::Fun(Box::new(Fun::new(self.ident, new_args, self.set)) as Box<dyn Function<T>>)
     }
     fn get_set(&self) -> T {
         self.set
+    }
+    fn get_ident(&self) -> Symbol {
+        self.ident
     }
 }
 
@@ -47,20 +77,14 @@ dyn_eq::eq_trait_object!(<T: 'static> Function<T>);
 
 /// A function called in a mathematical expression, like `sqrt(x)`
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Fun<From: Group, T: Group = From> {
+pub struct Fun<From: GroupBound, T: GroupBound = From> {
     flags: u8,
     pub(crate) ident: Symbol,
     pub(crate) args: Vec<Term<From>>,
     pub(crate) set: T,
 }
 
-impl<From: Ring, T: Ring> Fun<From, T> {
-    pub fn get_ident(&self) -> &str {
-        Context::get_symbol_data(&self.ident).name.as_str()
-    }
-}
-
-impl<From: Group, T: Group> Fun<From, T> {
+impl<From: GroupBound, T: GroupBound> Fun<From, T> {
     /// Create a new function expression
     pub fn new(ident: Symbol, args: Vec<Term<From>>, set: T) -> Self {
         Self {
@@ -72,7 +96,7 @@ impl<From: Group, T: Group> Fun<From, T> {
     }
 }
 
-impl<From: Ring, T: Ring> Flags for Fun<From, T> {
+impl<From: RingBound, T: RingBound> Flags for Fun<From, T> {
     fn get_flags(&self) -> u8 {
         self.flags
     }
@@ -81,9 +105,9 @@ impl<From: Ring, T: Ring> Flags for Fun<From, T> {
     }
 }
 
-impl<From: Ring, T: Ring> Print for Fun<From, T> {
+impl<From: RingBound, T: RingBound> Print for Fun<From, T> {
     fn print(&self, options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Self::fg::<Cyan>(self.get_ident(), options, f)?;
+        Self::fg::<Cyan>(self.get_ident_as_str(), options, f)?;
         Self::group_delim("(", options, f)?;
         for (i, term) in self.args.iter().enumerate() {
             write!(f, "{}", term)?;
@@ -109,7 +133,7 @@ impl<From: Ring, T: Ring> Print for Fun<From, T> {
                 res
             }
             _ => {
-                let mut fun = PrettyPrinter::from(format!("{}", self.get_ident(),));
+                let mut fun = PrettyPrinter::from(format!("{}", self.get_ident_as_str(),));
                 fun.concat("", false, &res);
                 fun
             }
