@@ -69,28 +69,68 @@
       return svg_document.querySelector(isBlock ? 'p.block-markup' : 'span.inline-markup');
     }
 
-    document.querySelectorAll('p').forEach(p => {
-      if (!(p.textContent.startsWith('$ ') && p.textContent.endsWith(' $'))) {
-        return;
+    function splitAtDelimiter(text) {
+      let regex = /\$.*?\$/g;
+      let index;
+      let data = [];
+      while ((res = regex.exec(text)) !== null) {
+        if (index !== res.index) {
+          data.push({
+            type: "text",
+            data: text.slice(index, res.index),
+            isBlock: false
+          })
+        }
+        data.push({
+          type: "math",
+          data: text.slice(res.index, regex.lastIndex),
+          isBlock: false
+        })
+        index = regex.lastIndex;
       }
-      renderMarkup(p.textContent, true).then(svg => {
-        p.style.display = 'none';
-        p.style.marginTop = '-40px';
 
-        p.parentNode.insertBefore(createElem(svg, true), p.nextSibling);
-      });
-    });
-    document.querySelectorAll('p code').forEach(p => {
-      if (!(p.textContent.startsWith('{') && p.textContent.endsWith('}'))) {
-        return;
+      if (text.length !== index) {
+        data.push({
+          type: "text",
+          data: text.slice(index, text.length),
+          isBlock: false
+        });
       }
-      renderMarkup(p.textContent.slice(1, -1), false).then(svg => {
-        p.style.display = 'none';
-        p.style.marginTop = '-40px';
+      return data;
+    }
 
-        p.parentNode.insertBefore(createElem(svg, false), p.nextSibling);
-      });
+    document.querySelectorAll('p').forEach(async p => {
+      let data;
+      if (p.textContent.startsWith("$ ") && p.textContent.endsWith(" $")) {
+        p.classList.add("block-markup");
+        data = [{
+          type: "math",
+          data: p.textContent,
+          isBlock: true
+        }];
+      } else {
+        data = splitAtDelimiter(p.textContent);
+      }
+
+      let fragment = document.createDocumentFragment();
+
+      for (elem of data) {
+        if (elem.type === "text") {
+          fragment.appendChild(document.createTextNode(elem.data));
+        } else {
+          let isBlock = elem.isBlock;
+          let data = elem.data;
+          let svg = await renderMarkup(data, isBlock || false);
+
+          let toInsert = isBlock ? svg : `<span class="inline-markup">${svg}</span>`;
+          const svg_document = new DOMParser().parseFromString(toInsert, 'text/html');
+
+          fragment.appendChild(svg_document.querySelector(isBlock ? "svg" : "span.inline-markup"));
+        }
+      }
+      p.replaceChildren(fragment);
     });
+
     function skipExampleWrap(node, pre) {
       const parent = pre.parentNode;
       if (!parent) return;
