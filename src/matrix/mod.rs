@@ -216,10 +216,12 @@ impl<T: RingBound> Matrix<T> {
                 if !self.ring.is_one(&self[(line, pivot)]) {
                     self.scale_row(
                         line,
-                        &self.ring.try_inv(&self[(line, pivot)]).expect(&format!(
-                            "Can't execute back substitution, pivot {} isn't inversible",
-                            &self[(line, pivot)]
-                        )),
+                        &self.ring.try_inv(&self[(line, pivot)]).unwrap_or_else(|| {
+                            panic!(
+                                "Can't execute back substitution, pivot {} isn't inversible",
+                                &self[(line, pivot)]
+                            )
+                        }),
                     );
                 }
                 // Remove coefficients under the pivot

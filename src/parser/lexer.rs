@@ -161,12 +161,12 @@ impl Lexer<'_> {
         TokenKind::Whitespace
     }
     fn consume_number(&mut self) -> TokenKind {
-        while self.peek_char().is_digit(10) && !self.eof() {
+        while self.peek_char().is_ascii_digit() && !self.eof() {
             self.chars.next();
         }
         if self.peek_char() == '.' {
             self.chars.next();
-            while self.peek_char().is_digit(10) && !self.eof() {
+            while self.peek_char().is_ascii_digit() && !self.eof() {
                 self.chars.next();
             }
             TokenKind::Literal {
@@ -207,7 +207,7 @@ impl Display for Lexer<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let new = self.clone();
         for token in new {
-            write!(f, "{:?}\n", token)?;
+            writeln!(f, "{:?}", token)?;
         }
         Ok(())
     }

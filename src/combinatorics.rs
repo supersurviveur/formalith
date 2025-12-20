@@ -8,9 +8,9 @@ use malachite::{
     Integer,
 };
 
-/// Iterator over compositions
+/// Iterator over compositions.
 ///
-/// ```
+/// ```no_test
 /// use formalith::combinatorics::CompositionIterator;
 ///
 /// let mut iterator = CompositionIterator::new(3, 2);

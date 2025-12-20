@@ -1,6 +1,8 @@
 //! Most commons groups, rings and fields like [struct@R] or [struct@M].
 //! These are currently only implemented using malachite arbitrary precision numbers.
 
+use malachite::Integer;
+use malachite::Natural;
 use malachite::base::num::arithmetic;
 use malachite::base::num::arithmetic::traits::CheckedRoot;
 use malachite::base::num::arithmetic::traits::Parity;
@@ -12,8 +14,6 @@ use malachite::base::num::{
     arithmetic::traits::Pow, basic::traits, conversion::traits::FromSciString,
 };
 use malachite::rational::Rational;
-use malachite::Integer;
-use malachite::Natural;
 use std::error::Error;
 use std::fmt::Display;
 use std::{cmp::Ordering, fmt, marker::PhantomData};
@@ -40,7 +40,6 @@ use crate::{
 use super::Group;
 use super::Ring;
 use super::TryElementFrom;
-use super::TryExprFrom;
 use super::{Derivable, Field, GroupBound, RingBound};
 
 /// The integer ring
@@ -79,6 +78,14 @@ impl Group for Z<Integer> {
     fn parse_litteral(&self, value: &str) -> Result<Self::Element, String> {
         Integer::from_sci_string(value)
             .ok_or(format!("Failed to parse \"{value}\" to malachite::Integer",))
+    }
+    fn print(
+        &self,
+        elem: &Self::Element,
+        _: &crate::printer::PrintOptions,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        write!(f, "{}", elem)
     }
     fn pretty_print(
         &self,
@@ -155,6 +162,14 @@ impl Group for R<malachite::rational::Rational> {
         Rational::from_sci_string(value).ok_or(format!(
             "Failed to parse \"{value}\" to malachite::Rational",
         ))
+    }
+    fn print(
+        &self,
+        elem: &Self::Element,
+        _: &crate::printer::PrintOptions,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        write!(f, "{}", elem)
     }
     fn pretty_print(
         &self,
@@ -265,11 +280,11 @@ impl Ring for R<Rational> {
                     if let Ok(exposant) = i64::try_from(&num) {
                         res = arithmetic::traits::Pow::pow(res, exposant);
                         num = Natural::ONE;
-                        if let Ok(root_exposant) = i64::try_from(&den) {
-                            if let Some(root_free) = (&res).checked_root(root_exposant) {
-                                res = root_free;
-                                return Term::Value(Value::new(res, *self));
-                            }
+                        if let Ok(root_exposant) = i64::try_from(&den)
+                            && let Some(root_free) = (&res).checked_root(root_exposant)
+                        {
+                            res = root_free;
+                            return Term::Value(Value::new(res, *self));
                         }
                     }
                     return Term::Pow(term::Pow::new(
@@ -293,10 +308,10 @@ impl Ring for R<Rational> {
                     }
                 }
                 Context::DET => {
-                    if let Some(Term::Value(matrix)) = fun.get_arg::<M<Self>>() {
-                        if let Ok(res) = matrix.value.det(*self) {
-                            return res;
-                        }
+                    if let Some(Term::Value(matrix)) = fun.get_arg::<M<Self>>()
+                        && let Ok(res) = matrix.value.det(*self)
+                    {
+                        return res;
                     }
                 }
                 _ => {}
@@ -312,42 +327,39 @@ impl Ring for R<Rational> {
                 if let (Term::Add(add), Term::Value(value)) = (&**base, &***exposant) {
                     if value.value.denominator_ref() == &Natural::ONE
                         && value.value.numerator_ref() != &Natural::ONE
+                        && let Ok(num) = usize::try_from(value.value.numerator_ref())
                     {
-                        if let Ok(num) = usize::try_from(value.value.numerator_ref()) {
-                            let mut terms = Term::zero(*self);
+                        let mut terms = Term::zero(*self);
 
-                            let mut iterator =
-                                combinatorics::CompositionIterator::new(add.len(), num);
+                        let mut iterator = combinatorics::CompositionIterator::new(add.len(), num);
 
-                            while let Some(k) = iterator.next_composition() {
-                                let ik = k
-                                    .iter()
-                                    .map(|x| Integer::from(*x))
-                                    .collect::<Vec<Integer>>();
-                                let mut result = Term::Value(Value::new(
-                                    combinatorics::Combinatorics::multinom(&ik).into(),
-                                    *self,
-                                ));
+                        while let Some(k) = iterator.next_composition() {
+                            let ik = k
+                                .iter()
+                                .map(|x| Integer::from(*x))
+                                .collect::<Vec<Integer>>();
+                            let mut result = Term::Value(Value::new(
+                                combinatorics::Combinatorics::multinom(&ik).into(),
+                                *self,
+                            ));
 
-                                for (i, term) in add.iter().enumerate() {
-                                    result *= term.pow(
-                                        &Value::new(Rational::from_unsigneds(k[i], 1), *self)
-                                            .into(),
-                                    );
-                                }
-
-                                terms += result;
+                            for (i, term) in add.iter().enumerate() {
+                                result *= term.pow(
+                                    &Value::new(Rational::from_unsigneds(k[i], 1), *self).into(),
+                                );
                             }
-                            if value.value.sign() == Ordering::Less {
-                                return term::Pow::new(
-                                    terms,
-                                    Term::Value(Value::new(Rational::NEGATIVE_ONE, *self)),
-                                    *self,
-                                )
-                                .into();
-                            } else {
-                                return terms;
-                            }
+
+                            terms += result;
+                        }
+                        if value.value.sign() == Ordering::Less {
+                            return term::Pow::new(
+                                terms,
+                                Term::Value(Value::new(Rational::NEGATIVE_ONE, *self)),
+                                *self,
+                            )
+                            .into();
+                        } else {
+                            return terms;
                         }
                     }
                 } else if let (Term::Mul(mul), _) = (&**base, &**exposant) {
@@ -388,11 +400,11 @@ pub enum VectorSpaceElement<T: GroupBound, Vector> {
     Vector(Vector),
 }
 
-impl<T: RingBound> VectorSpaceElement<T, Matrix<TermField<T>>> {
-    /// Compute the determinante of self in set `T`.
-    pub fn det(&self, set: T) -> MatrixResult<Term<T>> {
+impl<T: RingBound> VectorSpaceElement<TermField<T>, Matrix<TermField<T>>> {
+    /// Compute the determinant of self in set `T`.
+    pub fn det(&self, _set: T) -> MatrixResult<Term<T>> {
         match self {
-            VectorSpaceElement::Scalar(scalar) => Ok(Term::Value(Value::new(scalar.clone(), set))),
+            VectorSpaceElement::Scalar(scalar) => Ok(scalar.clone()),
             VectorSpaceElement::Vector(matrix) => matrix.det(),
         }
     }
@@ -436,22 +448,22 @@ impl<T: RingBound> M<T> {
 }
 
 impl<T: RingBound> Group for M<T> {
-    type Element = VectorSpaceElement<T, Matrix<TermField<T>>>;
+    type Element = VectorSpaceElement<TermField<T>, Matrix<TermField<T>>>;
 
-    type ExposantSet = Self;
+    type ExposantSet = M<T::ExposantSet>;
 
     fn get_exposant_set(&self) -> Self::ExposantSet {
-        *self
+        self.scalar_sub_set.get_exposant_set().get_matrix_ring()
     }
 
     fn zero(&self) -> Self::Element {
-        VectorSpaceElement::Scalar(self.scalar_sub_set.zero())
+        VectorSpaceElement::Scalar(self.scalar_sub_set.get_term_field().zero())
     }
 
     fn add(&self, a: &Self::Element, b: &Self::Element) -> Self::Element {
         match (a, b) {
             (VectorSpaceElement::Scalar(a), VectorSpaceElement::Scalar(b)) => {
-                VectorSpaceElement::Scalar(self.scalar_sub_set.add(a, b))
+                VectorSpaceElement::Scalar(self.scalar_sub_set.get_term_field().add(a, b))
             }
             (VectorSpaceElement::Vector(a), VectorSpaceElement::Vector(b)) => {
                 VectorSpaceElement::Vector(a + b)
@@ -462,7 +474,9 @@ impl<T: RingBound> Group for M<T> {
 
     fn neg(&self, a: &Self::Element) -> Self::Element {
         match a {
-            VectorSpaceElement::Scalar(a) => VectorSpaceElement::Scalar(self.scalar_sub_set.neg(a)),
+            VectorSpaceElement::Scalar(a) => {
+                VectorSpaceElement::Scalar(self.scalar_sub_set.get_term_field().neg(a))
+            }
             VectorSpaceElement::Vector(a) => VectorSpaceElement::Vector(-a),
         }
     }
@@ -470,15 +484,23 @@ impl<T: RingBound> Group for M<T> {
     fn partial_cmp(&self, a: &Self::Element, b: &Self::Element) -> Option<Ordering> {
         match (a, b) {
             (VectorSpaceElement::Scalar(a), VectorSpaceElement::Scalar(b)) => {
-                self.scalar_sub_set.partial_cmp(a, b)
+                self.scalar_sub_set.get_term_field().partial_cmp(a, b)
             }
             _ => None,
         }
     }
     fn parse_litteral(&self, value: &str) -> Result<Self::Element, String> {
         Ok(VectorSpaceElement::Scalar(
-            self.scalar_sub_set.parse_litteral(value)?,
+            self.scalar_sub_set.get_term_field().parse_litteral(value)?,
         ))
+    }
+    fn print(
+        &self,
+        elem: &Self::Element,
+        _: &crate::printer::PrintOptions,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        write!(f, "{}", elem)
     }
     fn pretty_print(
         &self,
@@ -486,7 +508,10 @@ impl<T: RingBound> Group for M<T> {
         options: &crate::printer::PrintOptions,
     ) -> crate::printer::PrettyPrinter {
         match elem {
-            VectorSpaceElement::Scalar(scalar) => self.scalar_sub_set.pretty_print(scalar, options),
+            VectorSpaceElement::Scalar(scalar) => self
+                .scalar_sub_set
+                .get_term_field()
+                .pretty_print(scalar, options),
             VectorSpaceElement::Vector(matrix) => Print::pretty_print(matrix, options),
         }
     }
@@ -494,11 +519,11 @@ impl<T: RingBound> Group for M<T> {
 
 impl<T: RingBound> Ring for M<T> {
     fn one(&self) -> Self::Element {
-        VectorSpaceElement::Scalar(self.scalar_sub_set.one())
+        VectorSpaceElement::Scalar(self.scalar_sub_set.get_term_field().one())
     }
 
     fn nth(&self, nth: i64) -> Self::Element {
-        VectorSpaceElement::Scalar(self.scalar_sub_set.nth(nth))
+        VectorSpaceElement::Scalar(self.scalar_sub_set.get_term_field().nth(nth))
     }
 
     fn mul(&self, _a: &Self::Element, _b: &Self::Element) -> Self::Element {
@@ -509,11 +534,10 @@ impl<T: RingBound> Ring for M<T> {
         match a {
             VectorSpaceElement::Scalar(scalar) => self
                 .scalar_sub_set
+                .get_term_field()
                 .try_inv(scalar)
-                .map(|s| VectorSpaceElement::Scalar(s)),
-            VectorSpaceElement::Vector(matrix) => {
-                matrix.inv().ok().map(|m| VectorSpaceElement::Vector(m))
-            }
+                .map(VectorSpaceElement::Scalar),
+            VectorSpaceElement::Vector(matrix) => matrix.inv().ok().map(VectorSpaceElement::Vector),
         }
     }
 
@@ -531,18 +555,29 @@ impl<T: RingBound> Ring for M<T> {
         (num, self.one())
     }
 
-    fn normalize(&self, a: Term<Self>) -> Term<Self> {
-        // Try downcasting the expression and apply normalization over the scalar set
-        match <T as TryExprFrom<Self>>::try_from_expr(&self.scalar_sub_set, a.clone()) {
-            Ok(expr) => {
-                return <Self as TryExprFrom<T>>::try_from_expr(
-                    self,
-                    self.scalar_sub_set.normalize(expr),
-                )
-                .expect("Converting back to matrix should always be possible")
+    fn normalize(&self, mut a: Term<Self>) -> Term<Self> {
+        a = match &a {
+            Term::Pow(pow)
+                if let Term::Value(term::Value {
+                    value: VectorSpaceElement::Scalar(ref base),
+                    ..
+                }) = *pow.base
+                    && let Term::Value(term::Value {
+                        value: VectorSpaceElement::Scalar(ref exposant),
+                        ..
+                    }) = **pow.exposant =>
+            {
+                Term::Value(term::Value::new(
+                    VectorSpaceElement::Scalar(Term::Pow(term::Pow::new(
+                        base.clone(),
+                        exposant.clone(),
+                        self.scalar_sub_set,
+                    ))),
+                    *self,
+                ))
             }
-            Err(_) => {}
-        }
+            other => other.clone(),
+        };
         match &a {
             Term::Value(value) => match &value.value {
                 VectorSpaceElement::Vector(matrix) => {
@@ -550,10 +585,15 @@ impl<T: RingBound> Ring for M<T> {
                     res.data.iter_mut().for_each(|x| *x = (*x).normalize());
                     return Term::Value(Value::new(VectorSpaceElement::Vector(res), *self));
                 }
-                VectorSpaceElement::Scalar(_) => {}
+                VectorSpaceElement::Scalar(scalar) => {
+                    return Term::Value(Value::new(
+                        VectorSpaceElement::Scalar(scalar.normalize()),
+                        *self,
+                    ));
+                }
             },
-            Term::Pow(term::Pow { base, exposant, .. }) => match (&**base, &***exposant) {
-                (
+            Term::Pow(term::Pow { base, exposant, .. }) => {
+                if let (
                     Term::Value(Value {
                         value: VectorSpaceElement::Vector(matrix),
                         ..
@@ -561,24 +601,30 @@ impl<T: RingBound> Ring for M<T> {
                     Term::Value(Value {
                         value: exposant, ..
                     }),
-                ) => {
-                    if Group::partial_cmp(self, exposant, &self.zero()) == Some(Ordering::Less) {
-                        return Term::Pow(term::Pow::new(
-                            Term::Value(Value::new(
-                                VectorSpaceElement::Vector(
-                                    matrix
-                                        .inv()
-                                        .expect(&format!("Cannot invert matrix {}", matrix)),
-                                ),
-                                *self,
-                            )),
-                            Term::Value(Value::new(self.neg(exposant), *self)),
+                ) = (&**base, &***exposant)
+                    && Group::partial_cmp(
+                        &self.get_exposant_set(),
+                        exposant,
+                        &self.get_exposant_set().zero(),
+                    ) == Some(Ordering::Less)
+                {
+                    return Term::Pow(term::Pow::new(
+                        Term::Value(Value::new(
+                            VectorSpaceElement::Vector(
+                                matrix
+                                    .inv()
+                                    .unwrap_or_else(|_| panic!("Cannot invert matrix {}", matrix)),
+                            ),
                             *self,
-                        ));
-                    }
+                        )),
+                        Term::Value(Value::new(
+                            self.get_exposant_set().neg(exposant),
+                            self.get_exposant_set(),
+                        )),
+                        *self,
+                    ));
                 }
-                _ => {}
-            },
+            }
             _ => {}
         }
         a
@@ -594,7 +640,10 @@ impl<T: RingBound> Ring for M<T> {
                     });
                     Term::Value(Value::new(VectorSpaceElement::Vector(res), *self))
                 }
-                VectorSpaceElement::Scalar(_) => a,
+                VectorSpaceElement::Scalar(scalar) => Term::Value(Value::new(
+                    VectorSpaceElement::Scalar(scalar.expand()),
+                    *self,
+                )),
             },
             _ => a,
         }
@@ -610,7 +659,10 @@ impl<T: RingBound> Ring for M<T> {
                     });
                     Term::Value(Value::new(VectorSpaceElement::Vector(res), *self))
                 }
-                _ => a,
+                VectorSpaceElement::Scalar(scalar) => Term::Value(Value::new(
+                    VectorSpaceElement::Scalar(scalar.simplify()),
+                    *self,
+                )),
             },
             _ => a,
         }
@@ -678,7 +730,7 @@ impl fmt::Display for TryCastError {
     }
 }
 
-impl<T: RingBound> TryElementFrom<M<T>> for T {
+impl<T: RingBound> TryElementFrom<M<T>> for TermField<T> {
     fn try_from_element(value: <M<T> as Group>::Element) -> Result<Self::Element, TryCastError> {
         match value {
             VectorSpaceElement::Scalar(scalar) => Ok(scalar),
@@ -687,8 +739,10 @@ impl<T: RingBound> TryElementFrom<M<T>> for T {
     }
 }
 
-impl<T: RingBound> TryElementFrom<T> for M<T> {
-    fn try_from_element(value: <T as Group>::Element) -> Result<Self::Element, TryCastError> {
+impl<T: RingBound> TryElementFrom<TermField<T>> for M<T> {
+    fn try_from_element(
+        value: <TermField<T> as Group>::Element,
+    ) -> Result<Self::Element, TryCastError> {
         Ok(VectorSpaceElement::Scalar(value))
     }
 }

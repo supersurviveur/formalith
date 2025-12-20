@@ -79,10 +79,7 @@ impl<T: RingBound> Print for Pow<T> {
         };
         let mut base = (*self.base).pretty_print(options);
         let exposant = (**pow.exposant).pretty_print(options);
-        if match *self.base {
-            Term::Mul(_) | Term::Add(_) => true,
-            _ => false,
-        } {
+        if matches!(*self.base, Term::Mul(_) | Term::Add(_)) {
             base.paren();
         }
         base.pow(&exposant);

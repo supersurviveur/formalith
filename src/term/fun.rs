@@ -133,7 +133,7 @@ impl<From: RingBound, T: RingBound> Print for Fun<From, T> {
                 res
             }
             _ => {
-                let mut fun = PrettyPrinter::from(format!("{}", self.get_ident_as_str(),));
+                let mut fun = PrettyPrinter::from(self.get_ident_as_str().to_string());
                 fun.concat("", false, &res);
                 fun
             }

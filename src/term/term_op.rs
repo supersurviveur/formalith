@@ -2,14 +2,23 @@
 
 use std::cmp::Ordering;
 
-use crate::field::{RingBound, Ring};
-
 use super::{Add, Mul, Pow, Term, Value};
+use crate::{
+    field::{Ring, RingBound},
+    term::flags::Flags,
+};
 
 impl<T: RingBound> std::ops::Add for &Term<T> {
     type Output = Term<T>;
 
     fn add(self, rhs: Self) -> Self::Output {
+        // trace!(
+        //     "Compute the addition between {} and {}",
+        //     self.stdout(),
+        //     rhs.stdout()
+        // );
+        debug_assert!(!self.needs_normalization(), "{:#?}", self);
+        debug_assert!(!rhs.needs_normalization());
         let ring = self.get_set();
         if let Term::Add(a1) = self {
             if let Term::Add(a2) = rhs {
@@ -53,6 +62,7 @@ impl<T: RingBound> std::ops::Add for &Term<T> {
                         a2_cursor = a2_iter.next()
                     }
                 }
+                res.set_normalized(true);
                 Term::Add(res)
             } else {
                 let mut a1_clone = a1.clone();
@@ -64,12 +74,18 @@ impl<T: RingBound> std::ops::Add for &Term<T> {
                         Ok(i) => {
                             if !a1_clone.terms[i].merge_terms(rhs) {
                                 a1_clone.terms.insert(i, rhs.clone())
+                            } else if a1_clone.terms[i].is_zero() {
+                                a1_clone.terms.remove(i);
                             }
                         }
                         Err(i) => a1_clone.terms.insert(i, rhs.clone()),
                     }
                 }
-                Term::Add(a1_clone)
+                if a1_clone.len() == 1 {
+                    a1_clone.terms[0].clone()
+                } else {
+                    Term::Add(a1_clone)
+                }
             }
         } else if let Term::Add(_) = rhs {
             rhs.add(self)
@@ -94,7 +110,7 @@ impl<T: RingBound> std::ops::Add for &Term<T> {
 
 impl<T: RingBound> std::ops::AddAssign<&Self> for Term<T> {
     fn add_assign(&mut self, rhs: &Self) {
-        *self = &*self + &rhs;
+        *self = &*self + rhs;
     }
 }
 
@@ -124,6 +140,8 @@ impl<T: RingBound> std::ops::Mul for &Term<T> {
     type Output = Term<T>;
 
     fn mul(self, rhs: Self) -> Self::Output {
+        debug_assert!(!self.needs_normalization());
+        debug_assert!(!rhs.needs_normalization());
         Term::Mul(Mul::new(vec![self.clone(), rhs.clone()], self.get_set())).normalize()
         // TODO, normalize mul directly like add
     }
@@ -131,7 +149,7 @@ impl<T: RingBound> std::ops::Mul for &Term<T> {
 
 impl<T: RingBound> std::ops::MulAssign<&Self> for Term<T> {
     fn mul_assign(&mut self, rhs: &Self) {
-        *self = &*self * &rhs;
+        *self = &*self * rhs;
     }
 }
 
@@ -161,6 +179,8 @@ impl<T: RingBound> std::ops::Div for &Term<T> {
     type Output = Term<T>;
 
     fn div(self, rhs: Self) -> Self::Output {
+        debug_assert!(!self.needs_normalization());
+        debug_assert!(!rhs.needs_normalization());
         self * &rhs
             .pow(&Term::Value(Value::new(
                 self.get_set().get_exposant_set().nth(-1),
@@ -204,6 +224,7 @@ impl<T: RingBound> std::ops::Neg for &Term<T> {
     type Output = Term<T>;
 
     fn neg(self) -> Self::Output {
+        debug_assert!(!self.needs_normalization());
         let mut new = self.clone();
         match new {
             Term::Value(ref mut value) => value.ring.neg_assign(&mut value.value),
@@ -213,6 +234,7 @@ impl<T: RingBound> std::ops::Neg for &Term<T> {
                     vec![new, Term::Value(Value::new(ring.neg(&ring.one()), ring))],
                     ring,
                 ))
+                .normalize();
             }
             Term::Symbol(ref symbol) => {
                 let ring = symbol.ring;
@@ -220,6 +242,7 @@ impl<T: RingBound> std::ops::Neg for &Term<T> {
                     vec![new, Term::Value(Value::new(ring.neg(&ring.one()), ring))],
                     ring,
                 ))
+                .normalize()
             }
             Term::Mul(ref mut mul) => {
                 let coeff = mul.get_coeff();
@@ -231,6 +254,7 @@ impl<T: RingBound> std::ops::Neg for &Term<T> {
                     vec![new, Term::Value(Value::new(ring.neg(&ring.one()), ring))],
                     ring,
                 ))
+                .normalize()
             }
             Term::Fun(ref fun) => {
                 let set = fun.get_set();
@@ -238,6 +262,7 @@ impl<T: RingBound> std::ops::Neg for &Term<T> {
                     vec![new, Term::Value(Value::new(set.neg(&set.one()), set))],
                     set,
                 ))
+                .normalize()
             }
         }
         new
@@ -248,6 +273,8 @@ impl<T: RingBound> std::ops::Sub for &Term<T> {
     type Output = Term<T>;
 
     fn sub(self, rhs: Self) -> Self::Output {
+        debug_assert!(!self.needs_normalization());
+        debug_assert!(!rhs.needs_normalization());
         self + &-rhs
     }
 }
@@ -277,6 +304,8 @@ impl<T: RingBound> std::ops::Sub for Term<T> {
 impl<T: RingBound> Term<T> {
     /// Compute `self^exposant`
     pub fn pow(&self, exposant: &Term<T::ExposantSet>) -> Term<T> {
+        debug_assert!(!self.needs_normalization());
+        debug_assert!(!exposant.needs_normalization());
         let res = Term::Pow(Pow::new(self.clone(), exposant.clone(), self.get_set()));
         res.normalize()
     }

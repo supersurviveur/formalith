@@ -1,16 +1,17 @@
 //! Printing trait and options to render expressions.
 
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 
 use owo_colors::{
-    colors::{BrightBlack, Yellow},
     Color, OwoColorize,
+    colors::{BrightBlack, Yellow},
 };
 use phf::phf_map;
 
 use crate::{field::RingBound, term::Term};
 
 /// Rendering options are stored here. It can be created from some presets or completly custom.
+#[derive(Debug)]
 pub struct PrintOptions {
     /// Set color rendering. Enabled by default if stdout support colors.
     pub colors: bool,
@@ -30,10 +31,50 @@ impl Default for PrintOptions {
     }
 }
 
+impl PrintOptions {
+    /// Print
+    fn stdout() -> Self {
+        PrintOptions {
+            colors: supports_color::on_cached(supports_color::Stream::Stdout).is_some(),
+            typst: false,
+            pretty_print: false,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Printer<'a> {
+    content: &'a dyn Print,
+    options: PrintOptions,
+}
+
+impl<'a> Printer<'a> {
+    pub fn new(content: &'a dyn Print, options: PrintOptions) -> Self {
+        Self { content, options }
+    }
+}
+
+impl Display for Printer<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Print::fmt(self.content, &self.options, f)
+    }
+}
+
 /// Elements and expressions which can be printed using options.
-pub trait Print {
+pub trait Print: Debug {
+    fn with_options<'a>(&'a self, options: PrintOptions) -> Printer<'a>
+    where
+        Self: Sized,
+    {
+        Printer::new(self, options)
+    }
+    fn stdout<'a>(&'a self) -> Printer<'a>
+    where
+        Self: Sized,
+    {
+        self.with_options(PrintOptions::stdout())
+    }
     /// Format `self` using given options, selecting or not pretty printing.
-    #[must_use]
     fn fmt(&self, options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if options.pretty_print {
             write!(f, "{}", self.pretty_print(options))
@@ -42,14 +83,12 @@ pub trait Print {
         }
     }
     /// Format `self` using given options.
-    #[must_use]
     fn print(&self, options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result;
     /// Format `self` using given options, with pretty printing.
     #[must_use]
     fn pretty_print(&self, options: &PrintOptions) -> PrettyPrinter;
 
     /// Apply delimiter color depending on options.
-    #[must_use]
     #[inline(always)]
     fn delimiter(
         text: &str,
@@ -63,7 +102,6 @@ pub trait Print {
     }
 
     /// Add paren to the expr if needed.
-    #[must_use]
     #[inline(always)]
     fn group<T: RingBound>(
         elem: &Term<T>,
@@ -80,7 +118,7 @@ pub trait Print {
         if need_paren {
             Self::group_delim("(", options, f)?;
         }
-        write!(f, "{}", elem)?;
+        elem.print(options, f)?;
         if need_paren {
             Self::group_delim(")", options, f)?;
         }
@@ -88,7 +126,6 @@ pub trait Print {
     }
 
     /// Apply group delimiter color depending on options.
-    #[must_use]
     #[inline(always)]
     fn group_delim(
         text: &str,
@@ -107,7 +144,6 @@ pub trait Print {
     }
 
     /// Apply operator color depending on options.
-    #[must_use]
     #[inline(always)]
     fn operator(
         text: &str,
@@ -121,7 +157,6 @@ pub trait Print {
     }
 
     /// Apply a compile-time color depending on options.
-    #[must_use]
     #[inline(always)]
     fn fg<C: Color>(
         text: &str,
@@ -248,9 +283,9 @@ impl PrettyPrinter {
 
         // Add space and the symbol
         let (sym, space) = if space {
-            (format!(" {} ", sym), " ".repeat(sym.chars().count() + 2))
+            (format!(" {sym} "), " ".repeat(sym.chars().count() + 2))
         } else {
-            (format!("{}", sym), " ".repeat(sym.chars().count()))
+            (sym.to_string(), " ".repeat(sym.chars().count()))
         };
         for i in 0..self.height() {
             if i == self.baseline {

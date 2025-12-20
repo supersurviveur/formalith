@@ -3,8 +3,9 @@
 use std::cmp::Ordering;
 
 use crate::{
-    field::{Field, GroupBound, Group, RingBound, Ring},
+    field::{Field, Group, GroupBound, Ring, RingBound},
     printer::Print,
+    term::flags::Flags,
 };
 
 use super::{Term, Value};
@@ -38,6 +39,7 @@ impl<T: RingBound> Group for TermField<T> {
     }
 
     fn add(&self, a: &Self::Element, b: &Self::Element) -> Self::Element {
+        debug_assert!(!(a + b).needs_normalization());
         a + b
     }
 
@@ -56,12 +58,21 @@ impl<T: RingBound> Group for TermField<T> {
         )))
     }
 
+    fn print(
+        &self,
+        elem: &Self::Element,
+        options: &crate::printer::PrintOptions,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        Print::print(elem, options, f)
+    }
+
     fn pretty_print(
         &self,
         elem: &Self::Element,
         options: &crate::printer::PrintOptions,
     ) -> crate::printer::PrettyPrinter {
-        elem.pretty_print(options)
+        Print::pretty_print(elem, options)
     }
 }
 
