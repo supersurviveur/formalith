@@ -8,7 +8,7 @@
 // - Implementing `TryElementCast` between every types
 // - Breaking infinite types cycle by implementing function (which are just call to panic in most cases) after some recursion (e.g. `M<M<M<T>>>`, see [Parser::parse_expression])
 #![allow(incomplete_features)]
-#![feature(specialization, if_let_guard)]
+#![feature(specialization)]
 
 pub mod combinatorics;
 pub mod context;
