@@ -1,3 +1,2 @@
 [build]
-# This flag is needed to avoid rustdoc to hang because of infinite recursive type (See Pow implementation)
-rustdocflags = [ "-Znext-solver", "--html-in-header", "docs/typstts.html" ] 
+rustdocflags = [ "--html-in-header", "docs/typstts.html" ] 

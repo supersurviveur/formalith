@@ -1,4 +1,4 @@
-//! Complexity is $f(x) = (1+ epsilon)abs(x)$, where $abs(epsilon) < 2^-54$, $ x^2 $
+//! Complexity is `{$f(x) = (1+ epsilon)abs(x)$}`, where `{$abs(epsilon) < 2^-54$}`, `{$sum x^2$}`
 //!
 //! $ f(x) $
 
@@ -8,7 +8,7 @@
 // - Implementing `TryElementCast` between every types
 // - Breaking infinite types cycle by implementing function (which are just call to panic in most cases) after some recursion (e.g. `M<M<M<T>>>`, see [Parser::parse_expression])
 #![allow(incomplete_features)]
-#![feature(specialization)]
+#![feature(specialization, if_let_guard)]
 
 pub mod combinatorics;
 pub mod context;

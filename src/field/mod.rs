@@ -66,6 +66,13 @@ pub trait Group: Clone + Copy + fmt::Debug + PartialEq + Eq + Hash + 'static {
     /// Parses a string to an element of this group
     fn parse_litteral(&self, value: &str) -> Result<Self::Element, String>;
 
+    /// Print an element of this set.
+    fn print(
+        &self,
+        elem: &Self::Element,
+        options: &PrintOptions,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result;
     /// Pretty print an element of this set.
     fn pretty_print(&self, elem: &Self::Element, options: &PrintOptions) -> PrettyPrinter;
 }

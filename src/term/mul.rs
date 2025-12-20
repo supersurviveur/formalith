@@ -63,11 +63,7 @@ impl<T: RingBound> Mul<T> {
     }
     /// Checks if the product have a constant coefficient.
     pub fn has_coeff(&self) -> bool {
-        if let Term::Value(_) = &self.factors.last().unwrap() {
-            true
-        } else {
-            false
-        }
+        matches!(self.factors.last().unwrap(), Term::Value(_))
     }
     /// Set the constant coefficient factor of the product
     pub fn set_coeff(&mut self, coeff: T::Element) {
@@ -149,10 +145,7 @@ impl<T: RingBound> Print for Mul<T> {
                 _ => factor,
             };
             let mut elem = Print::pretty_print(printed, options);
-            if match printed {
-                Term::Add(_) => true,
-                _ => false,
-            } {
+            if matches!(printed, Term::Add(_)) {
                 elem.paren();
             }
             match factor {

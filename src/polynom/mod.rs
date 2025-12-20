@@ -6,10 +6,12 @@ use std::{
     hash::Hash,
 };
 
+use tracing::trace;
+
 use crate::{
     field::{GroupBound, RingBound, TryElementFrom},
     printer::{PrettyPrinter, Print, PrintOptions},
-    term::Term,
+    term::{Term, TermField},
 };
 
 /// Types must implement this trait to be used as variables inside polynomials.
@@ -69,7 +71,7 @@ impl<V: Monomial, T: RingBound, U: RingBound> MultivariatePolynomial<V, T, U> {
         Self::constant(set.one(), set, exposant_set)
     }
 
-    /// Check if the polynom is the constant 1
+    /// Check if the polynom is the constant 0
     pub fn is_zero(&self) -> bool {
         self.terms.is_empty() || self.terms.iter().all(|(_, c)| self.set.is_zero(c))
     }
@@ -92,6 +94,7 @@ impl<V: Monomial, T: RingBound, U: RingBound> MultivariatePolynomial<V, T, U> {
         }
 
         let mut sorted: Vec<_> = combined.into_iter().collect();
+
         sorted.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
         sorted
     }
@@ -126,13 +129,19 @@ impl<V: Monomial, T: RingBound, U: RingBound> MultivariatePolynomial<V, T, U> {
     pub fn leading_term(&self) -> (Vec<(V, U::Element)>, T::Element) {
         self.terms.first().cloned().expect("Aucun terme")
     }
+}
 
+pub trait ToTerm<Out: RingBound> {
     /// Convert the polynomial to an expression
-    pub fn to_term(&self) -> Term<T>
-    where
-        Term<T>: From<V>,
-        Term<T::ExposantSet>: From<U::Element>,
-    {
+    fn to_term(&self) -> Term<Out>;
+}
+
+impl<V: Monomial, T: RingBound, U: RingBound> ToTerm<T> for MultivariatePolynomial<V, T, U>
+where
+    Term<T>: From<V>,
+    Term<T::ExposantSet>: From<U::Element>,
+{
+    fn to_term(&self) -> Term<T> {
         let mut res = Term::zero(self.set);
         for monomial in &self.terms {
             let mut term = Term::one(self.set);
@@ -140,6 +149,22 @@ impl<V: Monomial, T: RingBound, U: RingBound> MultivariatePolynomial<V, T, U> {
                 term *= Term::from(var.clone()).pow(&Term::from(exp.clone()));
             }
             term *= Term::constant(monomial.1.clone(), self.set);
+            res += term;
+        }
+        res
+    }
+}
+impl<T: RingBound> ToTerm<T>
+    for MultivariatePolynomial<Term<T>, TermField<T>, TermField<T::ExposantSet>>
+{
+    fn to_term(&self) -> Term<T> {
+        let mut res = Term::zero(self.set.get_set());
+        for monomial in &self.terms {
+            let mut term = Term::one(self.set.get_set());
+            for (var, exp) in &monomial.0 {
+                term *= var.clone().pow(&exp.clone());
+            }
+            term *= monomial.1.clone();
             res += term;
         }
         res
@@ -154,7 +179,7 @@ where
     V: TryFrom<U::Element>,
     <V as TryFrom<U::Element>>::Error: Debug,
 {
-    fn derivative(&self, var: &V) -> Self {
+    pub fn derivative(&self, var: &V) -> Self {
         let mut terms = Vec::new();
 
         for (vars, coeff) in &self.terms {
@@ -168,7 +193,6 @@ where
                     {
                         new_coeff
                     } else {
-                        println!("{:?}", self.set);
                         // Convert exponent to variable
                         terms.push((
                             vec![(
@@ -282,6 +306,7 @@ impl<V: Monomial, T: RingBound, U: RingBound> MultivariatePolynomial<V, T, U> {
         for (v, e) in denom_vars {
             match var_map.get_mut(v) {
                 Some(current_exp) => {
+                    println!("{} < {} : {}", current_exp, e, *current_exp < *e);
                     if *current_exp < *e {
                         return None;
                     }
@@ -302,6 +327,11 @@ impl<V: Monomial, T: RingBound, U: RingBound> MultivariatePolynomial<V, T, U> {
 
     /// Euclidian division, returning quotient and remainder
     pub fn quot_rem(&self, divisor: &Self) -> (Self, Self) {
+        trace!(
+            "Computing euclidian division between {} and {}",
+            self.stdout(),
+            divisor.stdout()
+        );
         let mut quotient = Self::zero(self.set, self.exposant_set);
         let mut remainder = Self::zero(self.set, self.exposant_set);
         let mut current_dividend = self.clone();
@@ -319,10 +349,14 @@ impl<V: Monomial, T: RingBound, U: RingBound> MultivariatePolynomial<V, T, U> {
                 self.exposant_set,
             ) {
                 Some((q_vars, q_coeff)) => {
+                    // trace!("{}", q_vars[0].1);
+                    // std::thread::sleep_ms(300);
                     let term_poly = Self::from_term((q_vars, q_coeff), self.set, self.exposant_set);
 
                     quotient = &quotient + &term_poly;
-                    let to_subtract = &term_poly * &divisor;
+
+                    let to_subtract = &term_poly * divisor;
+                    // trace!("{:#?} / {:#?}", current_dividend, to_subtract);
                     current_dividend = &current_dividend - &to_subtract;
                 }
                 None => {
@@ -334,6 +368,13 @@ impl<V: Monomial, T: RingBound, U: RingBound> MultivariatePolynomial<V, T, U> {
             }
         }
 
+        trace!(
+            "Euclidian division: {} = ({})*({}) + ({})",
+            self.stdout(),
+            divisor.stdout(),
+            quotient.stdout(),
+            remainder.stdout()
+        );
         (quotient, remainder)
     }
     /// Compute GCD between self and other using euclide algorithm
@@ -419,7 +460,6 @@ impl<V: Monomial, T: RingBound, U: RingBound> std::ops::Mul for &MultivariatePol
 
         for (vars1, coeff1) in &self.terms {
             for (vars2, coeff2) in &rhs.terms {
-                // Fusion des variables avec addition des exposants
                 let combined_vars = MultivariatePolynomial::<V, T, U>::combine_vars(
                     vars1,
                     vars2,
@@ -462,14 +502,12 @@ impl<V: Monomial, T: RingBound, U: RingBound> std::ops::Sub for &MultivariatePol
     fn sub(self, rhs: Self) -> Self::Output {
         let mut term_map = HashMap::new();
 
-        // Ajouter les termes du premier polynôme
         for (vars, coeff) in &self.terms {
             *term_map.entry(vars.clone()).or_insert(self.set.zero()) = self
                 .set
                 .add(term_map.get(vars).unwrap_or(&self.set.zero()), coeff);
         }
 
-        // Soustraire les termes du second polynôme
         for (vars, coeff) in &rhs.terms {
             *term_map.entry(vars.clone()).or_insert(self.set.zero()) = self
                 .set
@@ -556,7 +594,9 @@ impl<V: Monomial + Print, T: RingBound, U: RingBound> Print for MultivariatePoly
     fn print(&self, options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (j, (vars, coeff)) in self.terms.iter().enumerate() {
             let has_coeff = !self.set.is_one(coeff) || vars.is_empty();
-            write!(f, "{coeff}")?;
+            if has_coeff {
+                self.set.print(coeff, options, f)?;
+            }
 
             for (i, (var, exposant)) in vars.iter().enumerate() {
                 if i == 0 && !has_coeff {
@@ -565,7 +605,7 @@ impl<V: Monomial + Print, T: RingBound, U: RingBound> Print for MultivariatePoly
                 }
                 var.print(options, f)?;
                 write!(f, "^")?;
-                write!(f, "{exposant}")?;
+                self.exposant_set.print(exposant, options, f)?;
             }
             if j != self.terms.len() - 1 {
                 write!(f, "+")?;

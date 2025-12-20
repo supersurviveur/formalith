@@ -7,8 +7,10 @@ use formalith::{
     symbol,
 };
 use malachite::rational::Rational;
+use tracing_subscriber::filter::LevelFilter;
 
 pub fn main() {
+    tracing_subscriber::fmt::init();
     println!("{}", parse!("(x+y)^4", R).expand());
     println!("{}", parse!("71/1200 + (x^6*2)^-1", R));
 
@@ -67,9 +69,28 @@ pub fn main() {
     //         R
     //     ))
     // );
-    println!("{}", parse!("(x + 3)^3", R).to_polynomial());
+    println!(
+        "{}",
+        parse!("x^n", R)
+            .to_polynomial()
+            .gcd(&parse!("x^2", R).to_polynomial())
+    );
+    println!(
+        "{}",
+        parse!("x^(2*n)", R)
+            .to_polynomial()
+            .gcd(&parse!("x^n", R).to_polynomial())
+    );
+    println!("{}", parse!("(x^n + 3)^3", R).to_polynomial());
     println!("=");
-    println!("{}", parse!("(x + 3)^3", R).expand().factor());
+    println!(
+        "{}",
+        parse!("x^(3*n)", R)
+            .to_polynomial()
+            .quot_rem(&parse!("n*x", R).to_polynomial())
+            .0
+    );
+    // println!("{}", parse!("(x^n + 3)^3", R).expand().factor());
     // println!(
     //     "{} = ({})^{}",
     //     p,

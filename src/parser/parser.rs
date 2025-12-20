@@ -6,7 +6,7 @@ use std::iter::Peekable;
 use std::ops::Range;
 
 use crate::context::{Context, Symbol};
-use crate::field::{RingBound, M};
+use crate::field::{M, RingBound};
 use crate::term::{Fun, SymbolTerm, Term, Value};
 
 use super::lexer::{Lexer, Token, TokenKind};
@@ -83,7 +83,7 @@ impl<'a> Parser<'a> {
 pub trait ParserTrait<E: RingBound> {
     /// Parse an expression, which can be a literal, a sum, a group ()...
     fn parse_expression(&mut self, priority: usize, set: E)
-        -> Result<Option<Term<E>>, ParserError>;
+    -> Result<Option<Term<E>>, ParserError>;
 }
 
 impl Parser<'_> {
@@ -91,8 +91,8 @@ impl Parser<'_> {
     fn next_token_internal(&mut self) -> Option<Token> {
         let next = self.lexer.next();
         self.start_span = self.end_span;
-        if next.is_some() {
-            self.end_span += next.as_ref().unwrap().len;
+        if let Some(span) = &next {
+            self.end_span += span.len;
         }
         next
     }
@@ -207,32 +207,21 @@ impl<E: RingBound> ParserTrait<E> for Parser<'_> {
         match node {
             None => Ok(None),
             Some(mut node) => {
-                match (&self.token.kind, &node) {
-                    (TokenKind::OpenParen, Term::Symbol(symbol)) => {
-                        self.next_token();
-                        let arg_set = match symbol.symbol {
-                            Context::DET => Term::Fun(Box::new(Fun::new(
-                                symbol.symbol,
-                                self.parse_args(set.get_matrix_ring())?,
-                                set,
-                            ))),
-                            _ => Term::Fun(Box::new(Fun::new(
-                                symbol.symbol,
-                                self.parse_args(set)?,
-                                set,
-                            ))),
-                        };
-                        // let mut args = vec![];
-                        // args.push(self.parse_expression(0, arg_set)?.unwrap());
-                        // while self.token.kind == TokenKind::Comma {
-                        //     self.next_token();
-                        //     args.push(self.parse_expression(0, arg_set)?.unwrap())
-                        // }
-                        // self.expect_token(TokenKind::CloseParen)?;
-                        // node = Term::Fun(Box::new(Fun::new(symbol.symbol, args, set)));
-                        node = arg_set
-                    }
-                    _ => {}
+                if let (TokenKind::OpenParen, Term::Symbol(symbol)) = (&self.token.kind, &node) {
+                    self.next_token();
+                    let arg_set = match symbol.symbol {
+                        Context::DET => Term::Fun(Box::new(Fun::new(
+                            symbol.symbol,
+                            self.parse_args(set.get_matrix_ring())?,
+                            set,
+                        ))),
+                        _ => Term::Fun(Box::new(Fun::new(
+                            symbol.symbol,
+                            self.parse_args(set)?,
+                            set,
+                        ))),
+                    };
+                    node = arg_set
                 }
                 let mut op = self.get_op();
                 while self.token.kind != TokenKind::Eof
@@ -284,7 +273,7 @@ impl Parser<'_> {
             TokenKind::Literal { .. } => {
                 let lit = Term::Value(Value::new(
                     set.parse_litteral(content)
-                        .map_err(|err| ParserError::new(err))?,
+                        .map_err(ParserError::new)?,
                     set,
                 ));
                 self.next_token();
