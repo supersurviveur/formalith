@@ -556,27 +556,26 @@ impl<T: RingBound> Ring for M<T> {
     }
 
     fn normalize(&self, mut a: Term<Self>) -> Term<Self> {
-        a = match &a {
-            Term::Pow(pow)
-                if let Term::Value(term::Value {
-                    value: VectorSpaceElement::Scalar(ref base),
-                    ..
-                }) = *pow.base
-                    && let Term::Value(term::Value {
-                        value: VectorSpaceElement::Scalar(ref exposant),
-                        ..
-                    }) = **pow.exposant =>
-            {
-                Term::Value(term::Value::new(
-                    VectorSpaceElement::Scalar(Term::Pow(term::Pow::new(
-                        base.clone(),
-                        exposant.clone(),
-                        self.scalar_sub_set,
-                    ))),
-                    *self,
-                ))
-            }
-            other => other.clone(),
+        a = if let Term::Pow(pow) = &a
+            && let Term::Value(term::Value {
+                value: VectorSpaceElement::Scalar(ref base),
+                ..
+            }) = *pow.base
+            && let Term::Value(term::Value {
+                value: VectorSpaceElement::Scalar(ref exposant),
+                ..
+            }) = **pow.exposant
+        {
+            Term::Value(term::Value::new(
+                VectorSpaceElement::Scalar(Term::Pow(term::Pow::new(
+                    base.clone(),
+                    exposant.clone(),
+                    self.scalar_sub_set,
+                ))),
+                *self,
+            ))
+        } else {
+            a
         };
         match &a {
             Term::Value(value) => match &value.value {
