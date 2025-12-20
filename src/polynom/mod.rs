@@ -9,7 +9,7 @@ use std::{
 use tracing::trace;
 
 use crate::{
-    field::{GroupBound, RingBound, TryElementFrom},
+    field::{Group, GroupBound, RingBound, TryElementFrom},
     printer::{PrettyPrinter, Print, PrintOptions},
     term::{Term, TermField},
 };
@@ -21,17 +21,20 @@ pub trait Monomial: Debug + Clone + PartialEq + Eq + Hash + PartialOrd + Print {
 
 impl<T: Debug + Clone + PartialEq + Eq + Hash + PartialOrd + Print> Monomial for T {}
 
+type Monom<V, U> = (V, <U as Group>::Element);
+type PolynomElement<V, U, T> = (Vec<Monom<V, U>>, <T as Group>::Element);
+
 /// A multivariate polynomial, living in `T` with exposant in `U`. Variables can be any type implementing [Monomial], like [crate::context::Symbol] or [Term].
 #[derive(Debug, Clone, PartialEq, Hash)]
 pub struct MultivariatePolynomial<V: Monomial, T: GroupBound, U: GroupBound> {
-    terms: Vec<(Vec<(V, U::Element)>, T::Element)>,
+    terms: Vec<PolynomElement<V, U, T>>,
     set: T,
     exposant_set: U,
 }
 
 impl<V: Monomial, T: RingBound, U: RingBound> MultivariatePolynomial<V, T, U> {
     /// Create a new polynomial from its terms and sets.
-    pub fn new(terms: Vec<(Vec<(V, U::Element)>, T::Element)>, set: T, exposant_set: U) -> Self {
+    pub fn new(terms: Vec<PolynomElement<V, U, T>>, set: T, exposant_set: U) -> Self {
         Self {
             terms,
             set,
@@ -126,11 +129,12 @@ impl<V: Monomial, T: RingBound, U: RingBound> MultivariatePolynomial<V, T, U> {
     }
 
     /// Get the leading monomial
-    pub fn leading_term(&self) -> (Vec<(V, U::Element)>, T::Element) {
+    pub fn leading_term(&self) -> PolynomElement<V, U, T> {
         self.terms.first().cloned().expect("Aucun terme")
     }
 }
 
+/// Trait used to convert polynomials to expressions
 pub trait ToTerm<Out: RingBound> {
     /// Convert the polynomial to an expression
     fn to_term(&self) -> Term<Out>;
@@ -179,6 +183,7 @@ where
     V: TryFrom<U::Element>,
     <V as TryFrom<U::Element>>::Error: Debug,
 {
+    /// Computes the derivative of self according to `var`
     pub fn derivative(&self, var: &V) -> Self {
         let mut terms = Vec::new();
 
@@ -259,7 +264,7 @@ impl<V: Monomial, T: RingBound, U: RingBound> MultivariatePolynomial<V, T, U> {
         MultivariatePolynomial::normalize(&mut res);
         res
     }
-    fn from_term(term: (Vec<(V, U::Element)>, T::Element), set: T, exposant_set: U) -> Self {
+    fn from_term(term: PolynomElement<V, U, T>, set: T, exposant_set: U) -> Self {
         let mut res = Self {
             terms: vec![term],
             set,
@@ -298,7 +303,7 @@ impl<V: Monomial, T: RingBound, U: RingBound> MultivariatePolynomial<V, T, U> {
         denom_coeff: &T::Element,
         set: T,
         exposant_set: U,
-    ) -> Option<(Vec<(V, U::Element)>, T::Element)> {
+    ) -> Option<PolynomElement<V, U, T>> {
         let denom_inv = set.try_inv(denom_coeff).unwrap();
         let q_coeff = set.mul(num_coeff, &denom_inv);
 

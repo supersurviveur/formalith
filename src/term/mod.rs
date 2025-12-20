@@ -421,11 +421,11 @@ impl<T: RingBound> Term<T> {
                 } else if let Term::Value(Value { value, ring, .. }) = &m2.factors[1] {
                     let coeff = ring.add(value, &ring.one());
                     if ring.is_zero(&coeff) {
-                        let val = self.to_value();
+                        let val = self.convert_to_value();
                         val.value = ring.zero();
                     } else {
                         // Transform self to mul and add one to coeff
-                        let mul = self.to_mul();
+                        let mul = self.convert_to_mul();
                         mul.push(m2.factors[0].clone());
                         mul.set_coeff(coeff);
                     }
@@ -510,14 +510,14 @@ impl<T: RingBound> Term<T> {
                     return false;
                 } else if let Term::Value(Value { value, ring, .. }) = &**p2.exposant {
                     // Transform self to mul and add one to coeff
-                    self.to_pow(
+                    self.convert_to_pow(
                         p2.base.clone(),
                         Term::Value(Value::new(ring.add(value, &ring.one()), *ring)).into(),
                     );
                     return true;
                 } else {
                     // Add one to the coefficient
-                    self.to_pow(
+                    self.convert_to_pow(
                         p2.base.clone(),
                         Term::Add(Add::new(
                             vec![
@@ -555,7 +555,7 @@ impl<T: RingBound> Term<T> {
         false
     }
     /// Convert `self` to [Value], and return a mutable reference to easily edit it.
-    fn to_value(&mut self) -> &mut Value<T> {
+    fn convert_to_value(&mut self) -> &mut Value<T> {
         *self = Term::Value(Value::new(self.get_set().zero(), self.get_set()));
         if let Term::Value(n) = self {
             n
@@ -564,7 +564,7 @@ impl<T: RingBound> Term<T> {
         }
     }
     /// Convert `self` to [Mul], and return a mutable reference to easily edit it.
-    fn to_mul(&mut self) -> &mut Mul<T> {
+    fn convert_to_mul(&mut self) -> &mut Mul<T> {
         *self = Term::Mul(Mul::new(vec![], self.get_set()));
         if let Term::Mul(n) = self {
             n
@@ -573,7 +573,7 @@ impl<T: RingBound> Term<T> {
         }
     }
     /// Convert `self` to [Pow], and return a mutable reference to easily edit it.
-    fn to_pow(
+    fn convert_to_pow(
         &mut self,
         base: Box<Term<T>>,
         exposant: Box<Term<<T as Group>::ExposantSet>>,

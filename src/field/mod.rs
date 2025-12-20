@@ -4,7 +4,7 @@ use std::{cmp::Ordering, fmt, hash::Hash};
 
 use crate::{
     context::Symbol,
-    parser::parser::{Parser, ParserError},
+    parser::{Parser, ParserError},
     printer::{PrettyPrinter, PrintOptions},
     term::{Add, Mul, Pow, SymbolTerm, Term, TermField, Value},
 };
