@@ -1,4 +1,6 @@
-//! Parser implementation.
+//! Parser implementation, used in [crate::parse] and [crate::try_parse] macros.
+
+pub mod lexer;
 
 use std::error::Error;
 use std::fmt::{Debug, Display};
@@ -9,7 +11,7 @@ use crate::context::{Context, Symbol};
 use crate::field::{M, RingBound};
 use crate::term::{Fun, SymbolTerm, Term, Value};
 
-use super::lexer::{Lexer, Token, TokenKind};
+use lexer::{Lexer, Token, TokenKind};
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Op {
@@ -272,8 +274,7 @@ impl Parser<'_> {
         match &self.token.kind {
             TokenKind::Literal { .. } => {
                 let lit = Term::Value(Value::new(
-                    set.parse_litteral(content)
-                        .map_err(ParserError::new)?,
+                    set.parse_litteral(content).map_err(ParserError::new)?,
                     set,
                 ));
                 self.next_token();
@@ -301,7 +302,7 @@ impl Parser<'_> {
 #[macro_export(local_inner_macros)]
 macro_rules! try_parse {
     ( $x:expr, $f:expr ) => {
-        $crate::parser::parser::Parser::new($x.as_ref()).parse($f)
+        $crate::parser::Parser::new($x.as_ref()).parse($f)
     };
 }
 

@@ -22,10 +22,10 @@ use crate::combinatorics;
 use crate::context::Context;
 use crate::matrix::Matrix;
 use crate::matrix::MatrixResult;
+use crate::parser::Parser;
+use crate::parser::ParserError;
+use crate::parser::ParserTrait;
 use crate::parser::lexer::TokenKind;
-use crate::parser::parser::Parser;
-use crate::parser::parser::ParserError;
-use crate::parser::parser::ParserTrait;
 use crate::printer::PrettyPrinter;
 use crate::printer::Print;
 use crate::term;
@@ -587,7 +587,7 @@ impl<T: RingBound> Ring for M<T> {
                 }
                 VectorSpaceElement::Scalar(scalar) => {
                     return Term::Value(Value::new(
-                        VectorSpaceElement::Scalar(scalar.normalize()),
+                        VectorSpaceElement::Scalar((*scalar).normalize()),
                         *self,
                     ));
                 }
@@ -641,7 +641,7 @@ impl<T: RingBound> Ring for M<T> {
                     Term::Value(Value::new(VectorSpaceElement::Vector(res), *self))
                 }
                 VectorSpaceElement::Scalar(scalar) => Term::Value(Value::new(
-                    VectorSpaceElement::Scalar(scalar.expand()),
+                    VectorSpaceElement::Scalar((*scalar).expand()),
                     *self,
                 )),
             },
@@ -660,7 +660,7 @@ impl<T: RingBound> Ring for M<T> {
                     Term::Value(Value::new(VectorSpaceElement::Vector(res), *self))
                 }
                 VectorSpaceElement::Scalar(scalar) => Term::Value(Value::new(
-                    VectorSpaceElement::Scalar(scalar.simplify()),
+                    VectorSpaceElement::Scalar((*scalar).simplify()),
                     *self,
                 )),
             },

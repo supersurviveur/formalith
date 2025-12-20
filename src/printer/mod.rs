@@ -42,6 +42,7 @@ impl PrintOptions {
     }
 }
 
+/// Structs containing printing options used to format output.
 #[derive(Debug)]
 pub struct Printer<'a> {
     content: &'a dyn Print,
@@ -49,6 +50,7 @@ pub struct Printer<'a> {
 }
 
 impl<'a> Printer<'a> {
+    /// Create a new Printer
     pub fn new(content: &'a dyn Print, options: PrintOptions) -> Self {
         Self { content, options }
     }
@@ -62,12 +64,14 @@ impl Display for Printer<'_> {
 
 /// Elements and expressions which can be printed using options.
 pub trait Print: Debug {
+    /// Create e new printer for self with specific options.
     fn with_options<'a>(&'a self, options: PrintOptions) -> Printer<'a>
     where
         Self: Sized,
     {
         Printer::new(self, options)
     }
+    /// Create e new printer for self with default options for printing on the stdout.
     fn stdout<'a>(&'a self) -> Printer<'a>
     where
         Self: Sized,

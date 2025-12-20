@@ -43,6 +43,10 @@ impl<T: Ring> Add<T> {
             ring,
         }
     }
+    /// Returns true if the addition is empty.
+    pub fn is_empty(&self) -> bool {
+        self.terms.is_empty()
+    }
     /// Get the number of terms in the sum.
     pub fn len(&self) -> usize {
         self.terms.len()

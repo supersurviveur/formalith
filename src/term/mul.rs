@@ -43,6 +43,10 @@ impl<T: RingBound> Mul<T> {
             ring,
         }
     }
+    /// Returns true if the multiplication is empty.
+    pub fn is_empty(&self) -> bool {
+        self.factors.is_empty()
+    }
     /// Get the number of terms in the sum.
     pub fn len(&self) -> usize {
         self.factors.len()
