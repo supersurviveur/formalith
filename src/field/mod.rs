@@ -95,13 +95,6 @@ pub trait TryElementFrom<T: Group>: Group {
     fn try_from_element(value: T::Element) -> Result<Self::Element, TryCastError>;
 }
 
-// Auto implement for every groups
-impl<T: Group, U: Group> TryElementFrom<T> for U {
-    default fn try_from_element(_: T::Element) -> Result<Self::Element, TryCastError> {
-        Err(TryCastError("Cast unimplemented"))
-    }
-}
-
 // Specialize for T to T
 impl<T: Group> TryElementFrom<T> for T {
     fn try_from_element(value: T::Element) -> Result<Self::Element, TryCastError> {
@@ -202,7 +195,10 @@ pub trait TryExprFrom<From: Ring>: Ring {
     fn try_from_expr(&self, value: Term<From>) -> Result<Term<Self>, TryCastError>;
 }
 
-impl<From: RingBound, To: RingBound> TryExprFrom<From> for To {
+impl<From: RingBound, To: RingBound + TryElementFrom<From>> TryExprFrom<From> for To
+where
+    To::ExposantSet: TryElementFrom<From::ExposantSet>,
+{
     fn try_from_expr(&self, value: Term<From>) -> Result<Term<Self>, TryCastError> {
         match value {
             Term::Value(value) => Ok(Term::Value(Value::new(

@@ -686,7 +686,8 @@ impl<T: RingBound> Term<T> {
     /// Factor the expression.
     pub fn factor(&self) -> Self
     where
-        T: TryElementFrom<TermField<T>>,
+        TermField<T>: RingBound,
+        TermField<T>: TryElementFrom<TermField<T::ExposantSet>>,
         Term<T>: TryFrom<Term<T::ExposantSet>>,
         <Term<T> as TryFrom<Term<T::ExposantSet>>>::Error: Debug,
     {
