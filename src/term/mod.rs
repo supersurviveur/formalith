@@ -9,7 +9,7 @@ use std::{
 
 use crate::{
     context::{Context, Symbol},
-    field::{Group, GroupBound, M, Ring, RingBound, TryElementFrom, VectorSpaceElement},
+    field::{Group, M, Ring, RingBound, Set, TryElementFrom, VectorSpaceElement},
     matrix::{Matrix, MatrixResult},
     polynom::{MultivariatePolynomial, ToTerm},
     printer::{PrettyPrinter, Print, PrintOptions},
@@ -35,7 +35,7 @@ use flags::*;
 
 /// A mathematical expression.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Term<T: GroupBound> {
+pub enum Term<T: Set> {
     /// See [Value]
     Value(Value<T>),
     /// See [SymbolTerm]
@@ -50,7 +50,7 @@ pub enum Term<T: GroupBound> {
     Fun(Box<dyn Function<T>>),
 }
 
-impl<T: RingBound> std::cmp::PartialOrd for Term<T> {
+impl<T: Ring> std::cmp::PartialOrd for Term<T> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match (self, other) {
             (Term::Value(Value { value: v1, .. }), Term::Value(Value { value: v2, .. })) => {
@@ -68,7 +68,7 @@ impl<T: RingBound> std::cmp::PartialOrd for Term<T> {
     }
 }
 
-impl<T: RingBound> Term<T> {
+impl<T: Ring> Term<T> {
     /// Check if the expression is strictly positive
     pub fn is_strictly_positive(&self) -> bool {
         matches!(
@@ -93,7 +93,7 @@ impl<T: RingBound> Term<T> {
     }
 }
 
-impl<T: RingBound> Flags for Term<T> {
+impl<T: Set> Flags for Term<T> {
     fn get_flags(&self) -> u8 {
         match self {
             Term::Value(value) => value.get_flags(),
@@ -116,42 +116,38 @@ impl<T: RingBound> Flags for Term<T> {
     }
 }
 
-impl<T: RingBound> From<Mul<T>> for Term<T> {
+impl<T: Set> From<Mul<T>> for Term<T> {
     fn from(value: Mul<T>) -> Self {
         Term::Mul(value)
     }
 }
 
-impl<T: RingBound> From<Add<T>> for Term<T> {
+impl<T: Set> From<Add<T>> for Term<T> {
     fn from(value: Add<T>) -> Self {
         Term::Add(value)
     }
 }
 
-impl<T: RingBound> From<Value<T>> for Term<T> {
+impl<T: Set> From<Value<T>> for Term<T> {
     fn from(value: Value<T>) -> Self {
         Term::Value(value)
     }
 }
 
-impl<T: RingBound> From<Pow<T>> for Term<T> {
+impl<T: Set> From<Pow<T>> for Term<T> {
     fn from(value: Pow<T>) -> Self {
         Term::Pow(value)
     }
 }
 
-impl<T: RingBound> Term<T> {
+impl<T: Set> Term<T> {
     /// Absolute function
     pub const ABS: Symbol = Context::ABS;
 
-    /// Create a new empty product expression
-    pub fn new_mul(ring: T) -> Self {
-        Term::Mul(Mul::new(vec![], ring))
-    }
     /// Get the ring where constants live
     pub fn get_set(&self) -> T {
         match self {
-            Term::Value(value) => value.ring,
+            Term::Value(value) => value.set,
             Term::Symbol(symbol) => symbol.ring,
             Term::Add(add) => add.ring,
             Term::Mul(mul) => mul.ring,
@@ -159,13 +155,26 @@ impl<T: RingBound> Term<T> {
             Term::Fun(fun) => fun.get_set(),
         }
     }
-    /// Create a zero constant expression
-    pub fn zero(set: T) -> Self {
-        Term::Value(Value::new(set.zero(), set))
+    /// Create a new empty product expression
+    pub fn new_mul(ring: T) -> Self {
+        Term::Mul(Mul::new(vec![], ring))
+    }
+    /// Return `self` as [Value]. It's UB if `self` is not a value.
+    unsafe fn as_value(&mut self) -> &mut Value<T> {
+        match self {
+            Term::Value(value) => value,
+            _ => unreachable!(),
+        }
     }
     /// Create a constant expression
     pub fn constant(constant: T::Element, set: T) -> Self {
         Term::Value(Value::new(constant, set))
+    }
+}
+impl<T: Group> Term<T> {
+    /// Create a zero constant expression
+    pub fn zero(set: T) -> Self {
+        Term::Value(Value::new(set.zero(), set))
     }
     /// Check if the term is zero
     /// ```
@@ -175,17 +184,9 @@ impl<T: RingBound> Term<T> {
     /// ```
     pub fn is_zero(&self) -> bool {
         match self {
-            Term::Value(value) => value.ring.is_zero(&value.value),
+            Term::Value(value) => value.set.is_zero(&value.value),
             Term::Symbol(_) | Term::Add(_) | Term::Mul(_) | Term::Pow(_) => false,
             Term::Fun(_) => false, // TODO how can we check if it's really not zero ?
-        }
-    }
-
-    /// Return `self` as [Value]. It's UB if `self` is not a value.
-    unsafe fn as_value(&mut self) -> &mut Value<T> {
-        match self {
-            Term::Value(value) => value,
-            _ => unreachable!(),
         }
     }
 }
@@ -356,7 +357,7 @@ impl<T: RingBound> Term<T> {
             (
                 Term::Value(Value {
                     value: v1,
-                    ring: ring1,
+                    set: ring1,
                     ..
                 }),
                 Term::Value(Value { value: v2, .. }),
@@ -406,7 +407,10 @@ impl<T: RingBound> Term<T> {
                 // Merge 2*x + x
                 if m1.len() != 2 || m1.factors[0] != *other {
                     false
-                } else if let Term::Value(Value { value, ring, .. }) = &mut m1.factors[1] {
+                } else if let Term::Value(Value {
+                    value, set: ring, ..
+                }) = &mut m1.factors[1]
+                {
                     // Add one to m1 coeff
                     ring.add_assign(value, &ring.one());
                     true
@@ -418,7 +422,10 @@ impl<T: RingBound> Term<T> {
                 // Merge x + 2*x
                 if m2.len() != 2 || m2.factors[0] != *self {
                     false
-                } else if let Term::Value(Value { value, ring, .. }) = &m2.factors[1] {
+                } else if let Term::Value(Value {
+                    value, set: ring, ..
+                }) = &m2.factors[1]
+                {
                     let coeff = ring.add(value, &ring.one());
                     if ring.is_zero(&coeff) {
                         let val = self.convert_to_value();
@@ -459,7 +466,7 @@ impl<T: RingBound> Term<T> {
             (
                 Term::Value(Value {
                     value: v1,
-                    ring: ring1,
+                    set: ring1,
                     ..
                 }),
                 Term::Value(Value { value: v2, .. }),
@@ -484,7 +491,10 @@ impl<T: RingBound> Term<T> {
                 // Merge x^2 * x
                 if *p1.base != *other {
                     return false;
-                } else if let Term::Value(Value { value, ring, .. }) = &mut **p1.exposant {
+                } else if let Term::Value(Value {
+                    value, set: ring, ..
+                }) = &mut **p1.exposant
+                {
                     // Add one to m1 coeff
                     ring.add_assign(value, &ring.one());
                     return true;
@@ -508,7 +518,10 @@ impl<T: RingBound> Term<T> {
                 // Merge x * x^2
                 if *self != *p2.base {
                     return false;
-                } else if let Term::Value(Value { value, ring, .. }) = &**p2.exposant {
+                } else if let Term::Value(Value {
+                    value, set: ring, ..
+                }) = &**p2.exposant
+                {
                     // Transform self to mul and add one to coeff
                     self.convert_to_pow(
                         p2.base.clone(),
@@ -576,7 +589,7 @@ impl<T: RingBound> Term<T> {
     fn convert_to_pow(
         &mut self,
         base: Box<Term<T>>,
-        exposant: Box<Term<<T as Group>::ExposantSet>>,
+        exposant: Box<Term<<T as Set>::ExposantSet>>,
     ) -> &mut Pow<T> {
         *self = Term::Pow(Pow::new(base, exposant, self.get_set()));
         if let Term::Pow(n) = self {
@@ -664,7 +677,7 @@ impl<T: RingBound> Term<T> {
     /// ```
     pub fn is_one(&self) -> bool {
         match self {
-            Term::Value(value) => value.ring.is_one(&value.value),
+            Term::Value(value) => value.set.is_one(&value.value),
             Term::Symbol(_) | Term::Add(_) | Term::Mul(_) | Term::Pow(_) => false,
             Term::Fun(_) => todo!(),
         }
@@ -686,7 +699,7 @@ impl<T: RingBound> Term<T> {
     /// Factor the expression.
     pub fn factor(&self) -> Self
     where
-        TermField<T>: RingBound,
+        TermField<T>: Ring,
         TermField<T>: TryElementFrom<TermField<T::ExposantSet>>,
         Term<T>: TryFrom<Term<T::ExposantSet>>,
         <Term<T> as TryFrom<Term<T::ExposantSet>>>::Error: Debug,

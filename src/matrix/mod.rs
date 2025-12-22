@@ -6,16 +6,16 @@ use std::{
 };
 
 use crate::{
-    field::{Group, GroupBound, RingBound},
+    field::{Group, Ring, Set},
     printer::{PrettyPrinter, Print, PrintOptions},
 };
 
 /// A matrix with coefficients living in `T`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Matrix<T: Group> {
+pub struct Matrix<T: Set> {
     size: (usize, usize),
     pub(crate) data: Vec<T::Element>,
-    ring: T,
+    set: T,
 }
 
 /// An error thrown by a matrix method.
@@ -28,14 +28,10 @@ pub enum MatrixError {
 /// Result type of matrix methods.
 pub type MatrixResult<T> = Result<T, MatrixError>;
 
-impl<T: GroupBound> Matrix<T> {
+impl<T: Set> Matrix<T> {
     /// Create a new matrix
-    pub fn new(size: (usize, usize), data: Vec<T::Element>, ring: T) -> Self {
-        Self { size, data, ring }
-    }
-    /// Create a new matrix filled with zeros.
-    pub fn zero(size: (usize, usize), ring: T) -> Self {
-        Self::new(size, vec![ring.zero(); size.0 * size.1], ring)
+    pub fn new(size: (usize, usize), data: Vec<T::Element>, set: T) -> Self {
+        Self { size, data, set }
     }
 
     /// Get the size of the matrix (height * width)
@@ -66,18 +62,25 @@ impl<T: GroupBound> Matrix<T> {
     }
 }
 
-impl<T: GroupBound> std::ops::Add<&Self> for Matrix<T> {
+impl<T: Group> Matrix<T> {
+    /// Create a new matrix filled with zeros.
+    pub fn zero(size: (usize, usize), set: T) -> Self {
+        Self::new(size, vec![set.zero(); size.0 * size.1], set)
+    }
+}
+
+impl<T: Group> std::ops::Add<&Self> for Matrix<T> {
     type Output = Self;
 
     fn add(mut self, rhs: &Self) -> Self::Output {
         for (i, v) in rhs.data.iter().enumerate() {
-            self.ring.add_assign(&mut self.data[i], v);
+            self.set.add_assign(&mut self.data[i], v);
         }
         self
     }
 }
 
-impl<T: GroupBound> std::ops::Add for Matrix<T> {
+impl<T: Group> std::ops::Add for Matrix<T> {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
@@ -85,7 +88,7 @@ impl<T: GroupBound> std::ops::Add for Matrix<T> {
     }
 }
 
-impl<T: GroupBound> std::ops::Add for &Matrix<T> {
+impl<T: Group> std::ops::Add for &Matrix<T> {
     type Output = Matrix<T>;
 
     fn add(self, rhs: Self) -> Self::Output {
@@ -93,19 +96,19 @@ impl<T: GroupBound> std::ops::Add for &Matrix<T> {
     }
 }
 
-impl<T: GroupBound> std::ops::Neg for &Matrix<T> {
+impl<T: Group> std::ops::Neg for &Matrix<T> {
     type Output = Matrix<T>;
 
     fn neg(self) -> Self::Output {
         let mut res = self.clone();
         for v in &mut res.data {
-            self.ring.neg_assign(v);
+            self.set.neg_assign(v);
         }
         res
     }
 }
 
-impl<T: GroupBound> std::ops::Neg for Matrix<T> {
+impl<T: Group> std::ops::Neg for Matrix<T> {
     type Output = Matrix<T>;
 
     fn neg(self) -> Self::Output {
@@ -113,14 +116,14 @@ impl<T: GroupBound> std::ops::Neg for Matrix<T> {
     }
 }
 
-impl<T: GroupBound> PartialOrd for Matrix<T> {
+impl<T: Set> PartialOrd for Matrix<T> {
     fn partial_cmp(&self, _: &Self) -> Option<std::cmp::Ordering> {
         // There is no order over matrix
         None
     }
 }
 
-impl<T: GroupBound> Print for Matrix<T> {
+impl<T: Set> Print for Matrix<T> {
     fn print(
         &self,
         options: &crate::printer::PrintOptions,
@@ -148,7 +151,7 @@ impl<T: GroupBound> Print for Matrix<T> {
         let mut coeffs: Vec<_> = self
             .data
             .iter()
-            .map(|x| self.ring.pretty_print(x, options))
+            .map(|x| self.set.pretty_print(x, options))
             .collect();
         let mut lines_height = vec![0; self.size.0];
         let mut lines_baselines = vec![0; self.size.0];
@@ -196,13 +199,13 @@ impl<T: GroupBound> Print for Matrix<T> {
     }
 }
 
-impl<T: RingBound> Display for Matrix<T> {
+impl<T: Ring> Display for Matrix<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Print::fmt(self, &PrintOptions::default(), f)
     }
 }
 
-impl<T: RingBound> Matrix<T> {
+impl<T: Ring> Matrix<T> {
     /// Transform the matrix in place in row reduced echelon form.
     pub fn row_reduce(&mut self) {
         self.partial_row_reduce();
@@ -212,11 +215,11 @@ impl<T: RingBound> Matrix<T> {
     pub fn back_substitution(&mut self) {
         for line in (0..self.height()).rev() {
             // Find the pivot
-            if let Some(pivot) = (0..self.width()).find(|x| !self.ring.is_zero(&self[(line, *x)])) {
-                if !self.ring.is_one(&self[(line, pivot)]) {
+            if let Some(pivot) = (0..self.width()).find(|x| !self.set.is_zero(&self[(line, *x)])) {
+                if !self.set.is_one(&self[(line, pivot)]) {
                     self.scale_row(
                         line,
-                        &self.ring.try_inv(&self[(line, pivot)]).unwrap_or_else(|| {
+                        &self.set.try_inv(&self[(line, pivot)]).unwrap_or_else(|| {
                             panic!(
                                 "Can't execute back substitution, pivot {} isn't inversible",
                                 &self[(line, pivot)]
@@ -226,9 +229,9 @@ impl<T: RingBound> Matrix<T> {
                 }
                 // Remove coefficients under the pivot
                 for i in 0..line {
-                    self.row_add(i, line, &self.ring.neg(&self[(i, pivot)]));
+                    self.row_add(i, line, &self.set.neg(&self[(i, pivot)]));
                     // Coefficient under the pivot became zero, force the value to avoid complex expression
-                    self[(i, pivot)] = self.ring.zero();
+                    self[(i, pivot)] = self.set.zero();
                 }
             }
         }
@@ -239,12 +242,12 @@ impl<T: RingBound> Matrix<T> {
         if self.width() != self.height() {
             return Err(MatrixError::NotSquare);
         }
-        let mut augmented = Matrix::zero((self.size.0, self.size.1 * 2), self.ring);
+        let mut augmented = Matrix::zero((self.size.0, self.size.1 * 2), self.set);
         for line in 0..self.height() {
             for column in 0..self.width() {
                 augmented[(line, column)] = self[(line, column)].clone();
             }
-            augmented[(line, line + self.width())] = self.ring.one();
+            augmented[(line, line + self.width())] = self.set.one();
         }
         augmented.row_reduce();
 
@@ -259,7 +262,7 @@ impl<T: RingBound> Matrix<T> {
     }
 }
 
-impl<T: RingBound> Matrix<T> {
+impl<T: Ring> Matrix<T> {
     /// Transforn the matrix in place in row echelon form, returning its rank.
     pub fn partial_row_reduce(&mut self) -> usize {
         let (rows, cols) = self.size;
@@ -272,7 +275,7 @@ impl<T: RingBound> Matrix<T> {
 
             // Find a non-null pivot
             let pivot = match (pivot_row..rows)
-                .find(|&i| !self.ring.is_zero(&self.data[i * cols + pivot_col]))
+                .find(|&i| !self.set.is_zero(&self.data[i * cols + pivot_col]))
             {
                 Some(p) => p,
                 None => continue,
@@ -286,16 +289,16 @@ impl<T: RingBound> Matrix<T> {
             for row in (pivot_row + 1)..rows {
                 let factor = self.data[row * cols + pivot_col].clone();
 
-                if !self.ring.is_zero(&factor) {
+                if !self.set.is_zero(&factor) {
                     let pivot_val = self.data[pivot_row * cols + pivot_col].clone();
                     let ratio = self
-                        .ring
-                        .mul(&factor, &self.ring.try_inv(&pivot_val).unwrap());
-                    let neg_ratio = self.ring.neg(&ratio);
+                        .set
+                        .mul(&factor, &self.set.try_inv(&pivot_val).unwrap());
+                    let neg_ratio = self.set.neg(&ratio);
                     self.row_add(row, pivot_row, &neg_ratio);
                 }
                 // Coefficient under the pivot became zero, force the value to avoid complex expression
-                self.data[row * cols + pivot_col] = self.ring.zero();
+                self.data[row * cols + pivot_col] = self.set.zero();
             }
 
             pivot_row += 1;
@@ -311,9 +314,9 @@ impl<T: RingBound> Matrix<T> {
         match self.height() {
             0 => unreachable!(),
             1 => Ok(self.data[0].clone()),
-            2 => Ok(self.ring.sub(
-                &self.ring.mul(&self.data[0], &self.data[3]),
-                &self.ring.mul(&self.data[1], &self.data[2]),
+            2 => Ok(self.set.sub(
+                &self.set.mul(&self.data[0], &self.data[3]),
+                &self.set.mul(&self.data[1], &self.data[2]),
             )),
             _ => self.clone().det_in_place(),
         }
@@ -325,9 +328,9 @@ impl<T: RingBound> Matrix<T> {
         }
 
         self.partial_row_reduce();
-        let mut det = self.ring.one();
+        let mut det = self.set.one();
         for line in 0..self.width() {
-            self.ring
+            self.set
                 .mul_assign(&mut det, &self.data[line * self.width() + line]);
         }
         Ok(det)
@@ -338,7 +341,7 @@ impl<T: RingBound> Matrix<T> {
         let cols = self.size.1;
         for col in 0..cols {
             let index = row * cols + col;
-            self.data[index] = self.ring.mul(&self.data[index], factor);
+            self.data[index] = self.set.mul(&self.data[index], factor);
         }
     }
 
@@ -348,13 +351,13 @@ impl<T: RingBound> Matrix<T> {
         for col in 0..cols {
             let src_idx = source_row * cols + col;
             let tgt_idx = target_row * cols + col;
-            let term = self.ring.mul(&self.data[src_idx], factor);
-            self.data[tgt_idx] = self.ring.add(&self.data[tgt_idx], &term);
+            let term = self.set.mul(&self.data[src_idx], factor);
+            self.data[tgt_idx] = self.set.add(&self.data[tgt_idx], &term);
         }
     }
 }
 
-impl<T: RingBound> Index<usize> for Matrix<T> {
+impl<T: Set> Index<usize> for Matrix<T> {
     type Output = T::Element;
 
     #[inline]
@@ -363,14 +366,14 @@ impl<T: RingBound> Index<usize> for Matrix<T> {
     }
 }
 
-impl<T: RingBound> IndexMut<usize> for Matrix<T> {
+impl<T: Set> IndexMut<usize> for Matrix<T> {
     #[inline]
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.data[index]
     }
 }
 
-impl<T: RingBound> Index<(usize, usize)> for Matrix<T> {
+impl<T: Set> Index<(usize, usize)> for Matrix<T> {
     type Output = T::Element;
 
     /// Get the `i`th row and `j`th column of the matrix, where `index=(i,j)`.
@@ -380,7 +383,7 @@ impl<T: RingBound> Index<(usize, usize)> for Matrix<T> {
     }
 }
 
-impl<T: RingBound> IndexMut<(usize, usize)> for Matrix<T> {
+impl<T: Set> IndexMut<(usize, usize)> for Matrix<T> {
     /// Get the `i`th row and `j`th column of the matrix, where `index=(i,j)`.
     #[inline]
     fn index_mut(&mut self, index: (usize, usize)) -> &mut Self::Output {

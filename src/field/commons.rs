@@ -1,46 +1,36 @@
 //! Most commons groups, rings and fields like [struct@R] or [struct@M].
 //! These are currently only implemented using malachite arbitrary precision numbers.
 
-use malachite::Integer;
-use malachite::Natural;
-use malachite::base::num::arithmetic;
-use malachite::base::num::arithmetic::traits::CheckedRoot;
-use malachite::base::num::arithmetic::traits::Parity;
-use malachite::base::num::arithmetic::traits::Sign;
-use malachite::base::num::basic::traits::NegativeOne;
-use malachite::base::num::basic::traits::One;
-use malachite::base::num::basic::traits::Zero;
-use malachite::base::num::{
-    arithmetic::traits::Pow, basic::traits, conversion::traits::FromSciString,
+use malachite::{
+    Integer, Natural,
+    base::num::{
+        arithmetic::{
+            self,
+            traits::{CheckedRoot, Parity, Pow, Sign},
+        },
+        basic::traits::{self, NegativeOne, One, Zero},
+        conversion::traits::FromSciString,
+    },
+    rational::Rational,
 };
-use malachite::rational::Rational;
-use std::error::Error;
-use std::fmt::Display;
-use std::{cmp::Ordering, fmt, marker::PhantomData};
+use std::{
+    cmp::Ordering,
+    error::Error,
+    fmt::{self, Display},
+    marker::PhantomData,
+};
 
-use crate::combinatorics;
-use crate::context::Context;
-use crate::matrix::Matrix;
-use crate::matrix::MatrixResult;
-use crate::parser::Parser;
-use crate::parser::ParserError;
-use crate::parser::ParserTrait;
-use crate::parser::lexer::TokenKind;
-use crate::printer::PrettyPrinter;
-use crate::printer::Print;
-use crate::term;
-use crate::term::Fun;
-use crate::term::Mul;
-use crate::term::TermField;
 use crate::{
-    context::Symbol,
-    term::{Term, Value},
+    combinatorics,
+    context::{Context, Symbol},
+    field::{RingParseExpression, Set},
+    matrix::{Matrix, MatrixResult},
+    parser::{Parser, ParserError, ParserTraitBounded, lexer::TokenKind},
+    printer::{PrettyPrinter, Print},
+    term::{self, Fun, Mul, Term, TermField, Value},
 };
 
-use super::Group;
-use super::Ring;
-use super::TryElementFrom;
-use super::{Derivable, Field, GroupBound, RingBound};
+use super::{Derivable, Field, Group, Ring, RingBound, TryElementFrom};
 
 /// The integer ring
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -50,15 +40,31 @@ pub struct Z<T> {
 
 impl<T: Clone> Copy for Z<T> {}
 
-impl Group for Z<Integer> {
+impl Set for Z<Integer> {
     type Element = Integer;
 
     type ExposantSet = Z<malachite::Integer>; // TODO change type
-
     fn get_exposant_set(&self) -> Self::ExposantSet {
         *self
     }
+    fn print(
+        &self,
+        elem: &Self::Element,
+        _: &crate::printer::PrintOptions,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        write!(f, "{}", elem)
+    }
+    fn pretty_print(
+        &self,
+        elem: &Self::Element,
+        _: &crate::printer::PrintOptions,
+    ) -> crate::printer::PrettyPrinter {
+        PrettyPrinter::from(format!("{elem}"))
+    }
+}
 
+impl Group for Z<Integer> {
     fn zero(&self) -> Self::Element {
         Integer::ZERO
     }
@@ -78,21 +84,6 @@ impl Group for Z<Integer> {
     fn parse_litteral(&self, value: &str) -> Result<Self::Element, String> {
         Integer::from_sci_string(value)
             .ok_or(format!("Failed to parse \"{value}\" to malachite::Integer",))
-    }
-    fn print(
-        &self,
-        elem: &Self::Element,
-        _: &crate::printer::PrintOptions,
-        f: &mut std::fmt::Formatter<'_>,
-    ) -> std::fmt::Result {
-        write!(f, "{}", elem)
-    }
-    fn pretty_print(
-        &self,
-        elem: &Self::Element,
-        _: &crate::printer::PrintOptions,
-    ) -> crate::printer::PrettyPrinter {
-        PrettyPrinter::from(format!("{elem}"))
     }
 }
 
@@ -119,6 +110,7 @@ impl Ring for Z<Integer> {
         }
     }
 }
+impl<N> RingParseExpression<N> for Z<Integer> {}
 
 /// The integer ring, using [malachite::Integer] as constant to get arbitrary precision integers.
 pub const Z: Z<Integer> = Z {
@@ -133,35 +125,11 @@ pub struct R<T> {
 
 impl<T: Clone> Copy for R<T> {}
 
-impl Group for R<malachite::rational::Rational> {
+impl Set for R<malachite::rational::Rational> {
     type Element = Rational;
-
     type ExposantSet = R<Rational>;
-
     fn get_exposant_set(&self) -> Self::ExposantSet {
         *self
-    }
-
-    fn zero(&self) -> Self::Element {
-        malachite::rational::Rational::ZERO
-    }
-
-    fn add(&self, a: &Self::Element, b: &Self::Element) -> Self::Element {
-        a + b
-    }
-
-    fn neg(&self, a: &Self::Element) -> Self::Element {
-        -a
-    }
-
-    fn partial_cmp(&self, a: &Self::Element, b: &Self::Element) -> Option<Ordering> {
-        a.partial_cmp(b)
-    }
-
-    fn parse_litteral(&self, value: &str) -> Result<Self::Element, String> {
-        Rational::from_sci_string(value).ok_or(format!(
-            "Failed to parse \"{value}\" to malachite::Rational",
-        ))
     }
     fn print(
         &self,
@@ -189,6 +157,30 @@ impl Group for R<malachite::rational::Rational> {
             num.vertical_concat("─", &den);
             num
         }
+    }
+}
+
+impl Group for R<malachite::rational::Rational> {
+    fn zero(&self) -> Self::Element {
+        malachite::rational::Rational::ZERO
+    }
+
+    fn add(&self, a: &Self::Element, b: &Self::Element) -> Self::Element {
+        a + b
+    }
+
+    fn neg(&self, a: &Self::Element) -> Self::Element {
+        -a
+    }
+
+    fn partial_cmp(&self, a: &Self::Element, b: &Self::Element) -> Option<Ordering> {
+        a.partial_cmp(b)
+    }
+
+    fn parse_litteral(&self, value: &str) -> Result<Self::Element, String> {
+        Rational::from_sci_string(value).ok_or(format!(
+            "Failed to parse \"{value}\" to malachite::Rational",
+        ))
     }
 }
 
@@ -378,6 +370,8 @@ impl Ring for R<Rational> {
     }
 }
 
+impl<N> RingParseExpression<N> for R<Rational> {}
+
 impl Field for R<Rational> {}
 
 impl Derivable for R<Rational> {
@@ -393,7 +387,7 @@ pub const R: R<Rational> = R {
 
 /// An enum representing elements inside a vector space.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum VectorSpaceElement<T: GroupBound, Vector> {
+pub enum VectorSpaceElement<T: Set, Vector> {
     /// A scalar element living in `T`
     Scalar(T::Element),
     /// A vector living in the vector space
@@ -410,7 +404,7 @@ impl<T: RingBound> VectorSpaceElement<TermField<T>, Matrix<TermField<T>>> {
     }
 }
 
-impl<T: GroupBound, Vector: PartialEq> PartialOrd for VectorSpaceElement<T, Vector>
+impl<T: Set, Vector: PartialEq> PartialOrd for VectorSpaceElement<T, Vector>
 where
     T::Element: PartialOrd,
 {
@@ -425,7 +419,7 @@ where
     }
 }
 
-impl<T: GroupBound, Vector: Display> Display for VectorSpaceElement<T, Vector> {
+impl<T: Set, Vector: Display> Display for VectorSpaceElement<T, Vector> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             VectorSpaceElement::Scalar(scalar) => write!(f, "{}", scalar),
@@ -436,26 +430,47 @@ impl<T: GroupBound, Vector: Display> Display for VectorSpaceElement<T, Vector> {
 
 /// The matrix ring.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct M<T: RingBound> {
+pub struct M<T> {
     pub(crate) scalar_sub_set: T,
 }
 
-impl<T: RingBound> M<T> {
+impl<T> M<T> {
     /// Create a new matrix ring over T
     pub fn new(scalar_sub_set: T) -> Self {
         Self { scalar_sub_set }
     }
 }
 
-impl<T: RingBound> Group for M<T> {
+impl<T: RingBound> Set for M<T> {
     type Element = VectorSpaceElement<TermField<T>, Matrix<TermField<T>>>;
-
     type ExposantSet = M<T::ExposantSet>;
-
     fn get_exposant_set(&self) -> Self::ExposantSet {
-        self.scalar_sub_set.get_exposant_set().get_matrix_ring()
+        self.scalar_sub_set.get_exposant_set().get_matrix_group()
     }
+    fn print(
+        &self,
+        elem: &Self::Element,
+        _: &crate::printer::PrintOptions,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        write!(f, "{}", elem)
+    }
+    fn pretty_print(
+        &self,
+        elem: &Self::Element,
+        options: &crate::printer::PrintOptions,
+    ) -> crate::printer::PrettyPrinter {
+        match elem {
+            VectorSpaceElement::Scalar(scalar) => self
+                .scalar_sub_set
+                .get_term_field()
+                .pretty_print(scalar, options),
+            VectorSpaceElement::Vector(matrix) => Print::pretty_print(matrix, options),
+        }
+    }
+}
 
+impl<T: RingBound> Group for M<T> {
     fn zero(&self) -> Self::Element {
         VectorSpaceElement::Scalar(self.scalar_sub_set.get_term_field().zero())
     }
@@ -494,29 +509,7 @@ impl<T: RingBound> Group for M<T> {
             self.scalar_sub_set.get_term_field().parse_litteral(value)?,
         ))
     }
-    fn print(
-        &self,
-        elem: &Self::Element,
-        _: &crate::printer::PrintOptions,
-        f: &mut std::fmt::Formatter<'_>,
-    ) -> std::fmt::Result {
-        write!(f, "{}", elem)
-    }
-    fn pretty_print(
-        &self,
-        elem: &Self::Element,
-        options: &crate::printer::PrintOptions,
-    ) -> crate::printer::PrettyPrinter {
-        match elem {
-            VectorSpaceElement::Scalar(scalar) => self
-                .scalar_sub_set
-                .get_term_field()
-                .pretty_print(scalar, options),
-            VectorSpaceElement::Vector(matrix) => Print::pretty_print(matrix, options),
-        }
-    }
 }
-
 impl<T: RingBound> Ring for M<T> {
     fn one(&self) -> Self::Element {
         VectorSpaceElement::Scalar(self.scalar_sub_set.get_term_field().one())
@@ -666,6 +659,12 @@ impl<T: RingBound> Ring for M<T> {
             _ => a,
         }
     }
+}
+
+impl<T: RingBound, N> RingParseExpression<N> for M<T>
+where
+    for<'a> Parser<'a>: ParserTraitBounded<T, N>,
+{
     fn parse_expression(&self, parser: &mut Parser) -> Result<Option<Term<Self>>, ParserError> {
         match parser.token.kind {
             TokenKind::OpenBracket => {
@@ -677,7 +676,14 @@ impl<T: RingBound> Ring for M<T> {
 
                     let mut line_size = 0;
                     loop {
-                        lines.push(parser.parse_expression(0, self.scalar_sub_set)?.unwrap());
+                        lines.push(
+                            ParserTraitBounded::<T, N>::parse_expression_bounded(
+                                parser,
+                                0,
+                                self.scalar_sub_set,
+                            )?
+                            .unwrap(),
+                        );
                         line_size += 1;
 
                         if parser.token.kind != TokenKind::Comma {
@@ -730,7 +736,7 @@ impl fmt::Display for TryCastError {
 }
 
 impl<T: RingBound> TryElementFrom<M<T>> for TermField<T> {
-    fn try_from_element(value: <M<T> as Group>::Element) -> Result<Self::Element, TryCastError> {
+    fn try_from_element(value: <M<T> as Set>::Element) -> Result<Self::Element, TryCastError> {
         match value {
             VectorSpaceElement::Scalar(scalar) => Ok(scalar),
             VectorSpaceElement::Vector(_) => Err(TryCastError("Can't cast matrix to scalar")),
@@ -740,7 +746,7 @@ impl<T: RingBound> TryElementFrom<M<T>> for TermField<T> {
 
 impl<T: RingBound> TryElementFrom<TermField<T>> for M<T> {
     fn try_from_element(
-        value: <TermField<T> as Group>::Element,
+        value: <TermField<T> as Set>::Element,
     ) -> Result<Self::Element, TryCastError> {
         Ok(VectorSpaceElement::Scalar(value))
     }
@@ -757,10 +763,10 @@ impl From<usize> for Term<R<Rational>> {
 
 impl<T> TryElementFrom<TermField<R<T>>> for R<T>
 where
-    R<T>: RingBound,
+    Self: RingBound,
 {
     fn try_from_element(
-        value: <TermField<R<T>> as Group>::Element,
+        value: <TermField<R<T>> as Set>::Element,
     ) -> Result<Self::Element, TryCastError> {
         match value {
             Term::Value(value) => Ok(value.get_value()),

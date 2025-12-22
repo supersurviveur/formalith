@@ -5,13 +5,14 @@ pub mod lexer;
 use std::error::Error;
 use std::fmt::{Debug, Display};
 use std::iter::Peekable;
-use std::ops::Range;
+use std::ops::{Range, Sub};
 
 use crate::context::{Context, Symbol};
-use crate::field::{M, RingBound};
+use crate::field::{M, Ring, RingBound, RingParseExpression, RingParseExpressionBound};
 use crate::term::{Fun, SymbolTerm, Term, Value};
 
 use lexer::{Lexer, Token, TokenKind};
+use typenum::{Diff, U0, U1, U10, UInt};
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Op {
@@ -82,10 +83,13 @@ impl<'a> Parser<'a> {
 }
 
 /// Trait used by parser to implement some methods with specialization.
-pub trait ParserTrait<E: RingBound> {
+pub trait ParserTraitBounded<E: Ring, N> {
     /// Parse an expression, which can be a literal, a sum, a group ()...
-    fn parse_expression(&mut self, priority: usize, set: E)
-    -> Result<Option<Term<E>>, ParserError>;
+    fn parse_expression_bounded(
+        &mut self,
+        priority: usize,
+        set: E,
+    ) -> Result<Option<Term<E>>, ParserError>;
 }
 
 impl Parser<'_> {
@@ -144,14 +148,18 @@ impl Parser<'_> {
         }
     }
     /// Parse the parser's string, returning the parsed mathematical expression.
-    pub fn parse<E: RingBound>(&mut self, set: E) -> Result<Term<E>, ParserError> {
-        Ok(self
-            .parse_expression(0, set)?
-            .ok_or(ParserError::new("Input was empty".into()))?
-            .normalize())
+    pub fn parse<E: RingBound + RingParseExpressionBound>(
+        &mut self,
+        set: E,
+    ) -> Result<Term<E>, ParserError> {
+        Ok(
+            ParserTraitBounded::<E, U10>::parse_expression_bounded(self, 0, set)?
+                .ok_or(ParserError::new("Input was empty".into()))?
+                .normalize(),
+        )
     }
 
-    fn parse_symbol<E: RingBound>(&mut self, set: E) -> Result<Option<Term<E>>, ParserError> {
+    fn parse_symbol<E: Ring>(&mut self, set: E) -> Result<Option<Term<E>>, ParserError> {
         match &self.token.kind {
             TokenKind::Ident(sym) => {
                 let tmp = sym.clone();
@@ -161,11 +169,15 @@ impl Parser<'_> {
             _ => Ok(None),
         }
     }
-    fn parse_group<E: RingBound>(&mut self, set: E) -> Result<Option<Term<E>>, ParserError> {
+    fn parse_group<E: Ring, N>(&mut self, set: E) -> Result<Option<Term<E>>, ParserError>
+    where
+        Self: ParserTraitBounded<E, N>,
+    {
         match &self.token.kind {
             TokenKind::OpenParen => {
                 self.next_token();
-                let content = self.parse_expression(0, set)?.unwrap();
+                let content =
+                    ParserTraitBounded::<E, N>::parse_expression_bounded(self, 0, set)?.unwrap();
                 self.expect_token(TokenKind::CloseParen)?;
                 Ok(Some(content))
             }
@@ -173,39 +185,48 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_args<U: RingBound>(&mut self, arg_set: U) -> Result<Vec<Term<U>>, ParserError> {
+    fn parse_args<U: Ring, N>(&mut self, arg_set: U) -> Result<Vec<Term<U>>, ParserError>
+    where
+        Self: ParserTraitBounded<U, N>,
+    {
         let mut args = vec![];
-        args.push(self.parse_expression(0, arg_set)?.unwrap());
+        args.push(self.parse_expression_bounded(0, arg_set)?.unwrap());
         while self.token.kind == TokenKind::Comma {
             self.next_token();
-            args.push(self.parse_expression(0, arg_set)?.unwrap())
+            args.push(self.parse_expression_bounded(0, arg_set)?.unwrap())
         }
         Ok(args)
     }
 }
 
-impl<E: RingBound> ParserTrait<M<M<M<E>>>> for Parser<'_> {
-    fn parse_expression(
-        &mut self,
-        _: usize,
-        _: M<M<M<E>>>,
-    ) -> Result<Option<Term<M<M<M<E>>>>>, ParserError> {
+impl<E: Ring> ParserTraitBounded<E, U0> for Parser<'_> {
+    fn parse_expression_bounded(&mut self, _: usize, _: E) -> Result<Option<Term<E>>, ParserError> {
         Err(ParserError::new(
-            "Cannot recurse inside matrix ring more than 2 times".to_string(),
+            "Cannot recurse inside parser more than 10 times".to_string(),
         ))
     }
 }
-impl<E: RingBound> ParserTrait<E> for Parser<'_> {
-    default fn parse_expression(
+
+impl<E: RingBound + RingParseExpression<UInt<U, B>>, U, B> ParserTraitBounded<E, UInt<U, B>>
+    for Parser<'_>
+where
+    UInt<U, B>: Sub<U1>,
+    Self: ParserTraitBounded<M<E>, U>,
+    Self: ParserTraitBounded<<E as crate::field::Set>::ExposantSet, Diff<UInt<U, B>, U1>>,
+{
+    fn parse_expression_bounded(
         &mut self,
         priority: usize,
         set: E,
     ) -> Result<Option<Term<E>>, ParserError> {
         let node = set.parse_expression(self)?;
-        let node = node.map_or_else(|| self.parse_unary(priority, set), |n| Ok(Some(n)))?;
+        let node = node.map_or_else(
+            || self.parse_unary::<E, UInt<U, B>>(priority, set),
+            |n| Ok(Some(n)),
+        )?;
         let node = node.map_or_else(|| self.parse_literal(set), |n| Ok(Some(n)))?;
         let node = node.map_or_else(|| self.parse_symbol(set), |n| Ok(Some(n)))?;
-        let node = node.map_or_else(|| self.parse_group(set), |n| Ok(Some(n)))?;
+        let node = node.map_or_else(|| self.parse_group::<E, UInt<U, B>>(set), |n| Ok(Some(n)))?;
         match node {
             None => Ok(None),
             Some(mut node) => {
@@ -214,12 +235,12 @@ impl<E: RingBound> ParserTrait<E> for Parser<'_> {
                     let arg_set = match symbol.symbol {
                         Context::DET => Term::Fun(Box::new(Fun::new(
                             symbol.symbol,
-                            self.parse_args(set.get_matrix_ring())?,
+                            self.parse_args::<M<E>, U>(set.get_matrix_group())?,
                             set,
                         ))),
                         _ => Term::Fun(Box::new(Fun::new(
                             symbol.symbol,
-                            self.parse_args(set)?,
+                            self.parse_args::<E, UInt<U, B>>(set)?,
                             set,
                         ))),
                     };
@@ -231,7 +252,8 @@ impl<E: RingBound> ParserTrait<E> for Parser<'_> {
                     && priority < op.as_ref().unwrap().get_priority()
                 {
                     self.next_token();
-                    let (new_node, parsed) = self.parse_binary_expr(node, op.unwrap(), set)?;
+                    let (new_node, parsed) =
+                        self.parse_binary_expr::<E, UInt<U, B>>(node, op.unwrap(), set)?;
                     node = new_node;
                     if !parsed {
                         break;
@@ -244,17 +266,30 @@ impl<E: RingBound> ParserTrait<E> for Parser<'_> {
     }
 }
 impl Parser<'_> {
-    fn parse_binary_expr<E: RingBound>(
+    fn parse_binary_expr<E: RingBound, N>(
         &mut self,
         current: Term<E>,
         op: Op,
         set: E,
-    ) -> Result<(Term<E>, bool), ParserError> {
+    ) -> Result<(Term<E>, bool), ParserError>
+    where
+        N: Sub<U1>,
+        Self: ParserTraitBounded<E, N>,
+        Self: ParserTraitBounded<E::ExposantSet, Diff<N, U1>>,
+    {
         if let Op::Pow = op {
-            if let Some(right) = self.parse_expression(op.get_priority(), set.get_exposant_set())? {
+            if let Some(right) =
+                ParserTraitBounded::<E::ExposantSet, Diff<N, U1>>::parse_expression_bounded(
+                    self,
+                    op.get_priority(),
+                    set.get_exposant_set(),
+                )?
+            {
                 return Ok((current.pow(&right), true));
             }
-        } else if let Some(right) = self.parse_expression(op.get_priority(), set)? {
+        } else if let Some(right) =
+            ParserTraitBounded::<E, N>::parse_expression_bounded(self, op.get_priority(), set)?
+        {
             return Ok((
                 match op {
                     Op::Add => current + right,
@@ -269,7 +304,7 @@ impl Parser<'_> {
         Ok((current, false))
     }
 
-    fn parse_literal<E: RingBound>(&mut self, set: E) -> Result<Option<Term<E>>, ParserError> {
+    fn parse_literal<E: Ring>(&mut self, set: E) -> Result<Option<Term<E>>, ParserError> {
         let content = &self.input[self.span()];
         match &self.token.kind {
             TokenKind::Literal { .. } => {
@@ -283,15 +318,21 @@ impl Parser<'_> {
             _ => Ok(None),
         }
     }
-    fn parse_unary<E: RingBound>(
+    fn parse_unary<E: RingBound, N>(
         &mut self,
         priority: usize,
         set: E,
-    ) -> Result<Option<Term<E>>, ParserError> {
+    ) -> Result<Option<Term<E>>, ParserError>
+    where
+        Self: ParserTraitBounded<E, N>,
+    {
         match self.get_op() {
             Some(Op::Substract) => {
                 self.next_token();
-                Ok(self.parse_expression(priority, set)?.map(|term| -term))
+                Ok(
+                    ParserTraitBounded::<E, N>::parse_expression_bounded(self, priority, set)?
+                        .map(|term| -term),
+                )
             }
             _ => Ok(None),
         }

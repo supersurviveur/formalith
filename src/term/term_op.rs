@@ -3,10 +3,7 @@
 use std::cmp::Ordering;
 
 use super::{Add, Mul, Pow, Term, Value};
-use crate::{
-    field::{Ring, RingBound},
-    term::flags::Flags,
-};
+use crate::{field::{Ring, RingBound}, term::flags::Flags};
 
 impl<T: RingBound> std::ops::Add for &Term<T> {
     type Output = Term<T>;
@@ -227,7 +224,7 @@ impl<T: RingBound> std::ops::Neg for &Term<T> {
         debug_assert!(!self.needs_normalization());
         let mut new = self.clone();
         match new {
-            Term::Value(ref mut value) => value.ring.neg_assign(&mut value.value),
+            Term::Value(ref mut value) => value.set.neg_assign(&mut value.value),
             Term::Add(ref add) => {
                 let ring = add.ring;
                 new = Term::Mul(Mul::new(

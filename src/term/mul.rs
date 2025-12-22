@@ -3,7 +3,7 @@
 use std::fmt::Display;
 
 use crate::{
-    field::{GroupBound, RingBound},
+    field::{Ring, RingBound, Set},
     printer::{PrettyPrinter, Print, PrintOptions},
 };
 
@@ -11,13 +11,13 @@ use super::{Flags, Term, Value};
 
 /// A product of expressions.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Mul<T: GroupBound> {
+pub struct Mul<T: Set> {
     flags: u8,
     pub(crate) factors: Vec<Term<T>>,
     pub(crate) ring: T,
 }
 
-impl<T: RingBound> Flags for Mul<T> {
+impl<T: Set> Flags for Mul<T> {
     fn get_flags(&self) -> u8 {
         self.flags
     }
@@ -26,7 +26,7 @@ impl<T: RingBound> Flags for Mul<T> {
     }
 }
 
-impl<T: RingBound> Mul<T> {
+impl<T: Set> Mul<T> {
     /// Create a new product expression
     pub fn new(factors: Vec<Term<T>>, ring: T) -> Self {
         Self {
@@ -79,7 +79,7 @@ impl<T: RingBound> Mul<T> {
     }
 }
 
-impl<T: RingBound> Mul<T> {
+impl<T: Ring> Mul<T> {
     /// Return the constant coefficient factor of the product if it exists, one otherwise.
     pub fn get_coeff(&self) -> T::Element {
         if let Term::Value(v) = &self.factors.last().unwrap() {
@@ -90,7 +90,7 @@ impl<T: RingBound> Mul<T> {
     }
 }
 
-impl<T: RingBound> IntoIterator for Mul<T> {
+impl<T: Set> IntoIterator for Mul<T> {
     type Item = Term<T>;
 
     type IntoIter = std::vec::IntoIter<Term<T>>;
@@ -100,7 +100,7 @@ impl<T: RingBound> IntoIterator for Mul<T> {
     }
 }
 
-impl<'a, T: RingBound> IntoIterator for &'a Mul<T> {
+impl<'a, T: Set> IntoIterator for &'a Mul<T> {
     type Item = &'a Term<T>;
 
     type IntoIter = std::slice::Iter<'a, Term<T>>;

@@ -3,7 +3,7 @@
 use std::{fmt::Display, mem::ManuallyDrop};
 
 use crate::{
-    field::{GroupBound, RingBound},
+    field::{RingBound, Set},
     printer::{Print, PrintOptions},
 };
 
@@ -11,15 +11,15 @@ use super::{Flags, Term};
 
 /// A product of expressions.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Pow<T: GroupBound> {
+pub struct Pow<T: Set, E: Set = <T as Set>::ExposantSet> {
     flags: u8,
     pub(crate) base: Box<Term<T>>,
     /// `ManuallyDrop` is used to avoid drop-checking which fails for infinite type `T::ExposantSet::ExposantSet::...`
-    pub(crate) exposant: ManuallyDrop<Box<Term<T::ExposantSet>>>,
+    pub(crate) exposant: ManuallyDrop<Box<Term<E>>>,
     pub(crate) set: T,
 }
 
-impl<T: RingBound> Flags for Pow<T> {
+impl<T: Set> Flags for Pow<T> {
     fn get_flags(&self) -> u8 {
         self.flags
     }
@@ -28,7 +28,7 @@ impl<T: RingBound> Flags for Pow<T> {
     }
 }
 
-impl<T: RingBound> Pow<T> {
+impl<T: Set> Pow<T> {
     /// Create a new pow expression
     pub fn new<E: Into<Box<Term<T>>>, F: Into<Box<Term<T::ExposantSet>>>>(
         base: E,
@@ -44,7 +44,7 @@ impl<T: RingBound> Pow<T> {
     }
 }
 
-impl<T: GroupBound> Drop for Pow<T> {
+impl<T: Set, E: Set> Drop for Pow<T, E> {
     fn drop(&mut self) {
         unsafe {
             ManuallyDrop::drop(&mut self.exposant);

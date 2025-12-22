@@ -11,7 +11,7 @@ use tracing_subscriber::filter::LevelFilter;
 
 pub fn main() {
     tracing_subscriber::fmt::init();
-    println!("{}", parse!("(x+y)^4", R).expand());
+    println!("{}", parse!("(x+y)^3", R).expand());
     println!("{}", parse!("71/1200 + (x^6*2)^-1", R));
 
     println!("{}", parse!("[[x, 4], [2, 3]]^-1", M).simplify());
