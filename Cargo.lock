@@ -58,6 +58,7 @@ dependencies = [
  "supports-color",
  "tracing",
  "tracing-subscriber",
+ "typenum",
 ]
 
 [[package]]
@@ -369,6 +370,12 @@ dependencies = [
  "tracing-core",
  "tracing-log",
 ]
+
+[[package]]
+name = "typenum"
+version = "1.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "562d481066bde0658276a35467c4af00bdc6ee726305698a55b86e61d7ad82bb"
 
 [[package]]
 name = "unicode-ident"

@@ -3,7 +3,7 @@
 use std::fmt::Display;
 
 use crate::{
-    field::{GroupBound, Ring, RingBound},
+    field::{RingBound, Set},
     printer::{PrettyPrinter, Print, PrintOptions},
 };
 
@@ -11,13 +11,13 @@ use super::{Flags, Term, Value};
 
 /// A sum of expressions.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Add<T: GroupBound> {
+pub struct Add<T: Set> {
     flags: u8,
     pub(crate) terms: Vec<Term<T>>,
     pub(crate) ring: T,
 }
 
-impl<T: Ring> Flags for Add<T> {
+impl<T: Set> Flags for Add<T> {
     fn get_flags(&self) -> u8 {
         self.flags
     }
@@ -26,7 +26,7 @@ impl<T: Ring> Flags for Add<T> {
     }
 }
 
-impl<T: Ring> Add<T> {
+impl<T: Set> Add<T> {
     /// Create an empty sum expression.
     pub fn new(terms: Vec<Term<T>>, ring: T) -> Self {
         Self {
@@ -62,7 +62,7 @@ impl<T: Ring> Add<T> {
     }
 }
 
-impl<T: RingBound> IntoIterator for Add<T> {
+impl<T: Set> IntoIterator for Add<T> {
     type Item = Term<T>;
 
     type IntoIter = std::vec::IntoIter<Term<T>>;
@@ -72,7 +72,7 @@ impl<T: RingBound> IntoIterator for Add<T> {
     }
 }
 
-impl<'a, T: RingBound> IntoIterator for &'a Add<T> {
+impl<'a, T: Set> IntoIterator for &'a Add<T> {
     type Item = &'a Term<T>;
 
     type IntoIter = std::slice::Iter<'a, Term<T>>;
@@ -90,7 +90,9 @@ impl<T: RingBound> Print for Add<T> {
     ) -> std::fmt::Result {
         for (i, term) in self.terms.iter().enumerate() {
             match term {
-                Term::Value(Value { value, ring, .. }) if term.is_strictly_negative() => {
+                Term::Value(Value {
+                    value, set: ring, ..
+                }) if term.is_strictly_negative() => {
                     if i != 0 {
                         Self::operator("-", options, f)?;
                     }
@@ -122,7 +124,9 @@ impl<T: RingBound> Print for Add<T> {
         let mut res: Option<PrettyPrinter> = None;
         for term in self.terms.iter() {
             match term {
-                Term::Value(Value { value, ring, .. }) if term.is_strictly_negative() => {
+                Term::Value(Value {
+                    value, set: ring, ..
+                }) if term.is_strictly_negative() => {
                     let elem = Print::pretty_print(&Value::new(ring.neg(value), *ring), options);
                     if let Some(res) = &mut res {
                         res.concat("-", true, &elem);

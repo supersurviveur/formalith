@@ -3,7 +3,7 @@
 use std::cmp::Ordering;
 
 use crate::{
-    field::{Field, Group, GroupBound, Ring, RingBound},
+    field::{Field, Group, Ring, Set, RingBound},
     printer::Print,
     term::flags::Flags,
 };
@@ -12,50 +12,27 @@ use super::{Term, Value};
 
 /// A ring where constants are complete expressions, like `2*x^2`. It is usefull for matrix and polynoms, to allow expressions inside coefficients.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct TermField<T: GroupBound>(T);
+pub struct TermField<T>(T);
 
-impl<T: GroupBound> TermField<T> {
+impl<T> TermField<T> {
     /// Create a new term field for the set `T`
     pub const fn new(ring: T) -> Self {
         Self(ring)
     }
+
     /// Get the inner set
-    pub fn get_set(&self) -> T {
-        self.0
+    pub fn get_set(&self) -> &T {
+        &self.0
     }
 }
 
-impl<T: RingBound> Group for TermField<T> {
+impl<T: RingBound> Set for TermField<T> {
     type Element = Term<T>;
 
     type ExposantSet = Self;
 
     fn get_exposant_set(&self) -> Self::ExposantSet {
         *self
-    }
-
-    fn zero(&self) -> Self::Element {
-        Term::Value(Value::new(self.get_set().zero(), self.get_set()))
-    }
-
-    fn add(&self, a: &Self::Element, b: &Self::Element) -> Self::Element {
-        debug_assert!(!(a + b).needs_normalization());
-        a + b
-    }
-
-    fn neg(&self, a: &Self::Element) -> Self::Element {
-        -a
-    }
-
-    fn partial_cmp(&self, a: &Self::Element, b: &Self::Element) -> Option<Ordering> {
-        PartialOrd::partial_cmp(a, b)
-    }
-
-    fn parse_litteral(&self, value: &str) -> Result<Term<T>, String> {
-        Ok(Term::Value(Value::new(
-            self.0.parse_litteral(value)?,
-            self.get_set(),
-        )))
     }
 
     fn print(
@@ -76,9 +53,35 @@ impl<T: RingBound> Group for TermField<T> {
     }
 }
 
+impl<T: RingBound> Group for TermField<T> {
+    fn zero(&self) -> Self::Element {
+        Term::Value(Value::new(self.get_set().zero(), *self.get_set()))
+    }
+
+    fn add(&self, a: &Self::Element, b: &Self::Element) -> Self::Element {
+        debug_assert!(!(a + b).needs_normalization());
+        a + b
+    }
+
+    fn neg(&self, a: &Self::Element) -> Self::Element {
+        -a
+    }
+
+    fn partial_cmp(&self, a: &Self::Element, b: &Self::Element) -> Option<Ordering> {
+        PartialOrd::partial_cmp(a, b)
+    }
+
+    fn parse_litteral(&self, value: &str) -> Result<Term<T>, String> {
+        Ok(Term::Value(Value::new(
+            self.0.parse_litteral(value)?,
+            *self.get_set(),
+        )))
+    }
+}
+
 impl<T: RingBound> Ring for TermField<T> {
     fn one(&self) -> Self::Element {
-        Term::Value(Value::new(self.get_set().one(), self.get_set()))
+        Term::Value(Value::new(self.get_set().one(), *self.get_set()))
     }
 
     fn mul(&self, a: &Self::Element, b: &Self::Element) -> Self::Element {
@@ -86,7 +89,7 @@ impl<T: RingBound> Ring for TermField<T> {
     }
 
     fn nth(&self, nth: i64) -> Self::Element {
-        Term::Value(Value::new(self.get_set().nth(nth), self.get_set()))
+        Term::Value(Value::new(self.get_set().nth(nth), *self.get_set()))
     }
 
     fn try_inv(&self, a: &Self::Element) -> Option<Self::Element> {
@@ -97,4 +100,4 @@ impl<T: RingBound> Ring for TermField<T> {
     }
 }
 
-impl<T: Field> Field for TermField<T> {}
+impl<T: Field + RingBound> Field for TermField<T> {}

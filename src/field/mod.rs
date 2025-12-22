@@ -11,22 +11,36 @@ use crate::{
 
 pub mod commons;
 pub use commons::*;
+use typenum::{U0, U1, U2, U3, U4, U5, U6, U7, U8, U9, U10};
 
-/// A group is a set and a binary operation `+` and :
-/// - `+` is associative
-/// - `*` has an identity element `zero`
-/// - Every element has an inverse element
-pub trait Group: Clone + Copy + fmt::Debug + PartialEq + Eq + Hash + 'static {
-    /// The type of the elements living in this group
+/// A set.
+pub trait Set: Clone + Copy + fmt::Debug + PartialEq + Eq + Hash + 'static {
+    /// The type of the elements living in this set
     type Element: Clone + fmt::Debug + fmt::Display + PartialEq + Eq + PartialOrd + Hash;
 
     /// The set where exposants live. Mostly [const@commons::Z], but it can be any ring,
     /// like [const@R] for real numbers since power is not only a notation for `x*x*...*x` but a defined operation.
     type ExposantSet: Group;
 
-    /// Get the exposant set for this group
+    /// Get the exposant set for this set
     fn get_exposant_set(&self) -> Self::ExposantSet;
 
+    /// Print an element of this set.
+    fn print(
+        &self,
+        elem: &Self::Element,
+        options: &PrintOptions,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result;
+    /// Pretty print an element of this set.
+    fn pretty_print(&self, elem: &Self::Element, options: &PrintOptions) -> PrettyPrinter;
+}
+
+/// A group is a set and a binary operation `+` and :
+/// - `+` is associative
+/// - `*` has an identity element `zero`
+/// - Every element has an inverse element
+pub trait Group: Set {
     /// Get the zero (aka identity element for `+`) of this group
     fn zero(&self) -> Self::Element;
     /// Check if a number is zero.
@@ -66,22 +80,28 @@ pub trait Group: Clone + Copy + fmt::Debug + PartialEq + Eq + Hash + 'static {
     /// Parses a string to an element of this group
     fn parse_litteral(&self, value: &str) -> Result<Self::Element, String>;
 
-    /// Print an element of this set.
-    fn print(
-        &self,
-        elem: &Self::Element,
-        options: &PrintOptions,
-        f: &mut std::fmt::Formatter<'_>,
-    ) -> std::fmt::Result;
-    /// Pretty print an element of this set.
-    fn pretty_print(&self, elem: &Self::Element, options: &PrintOptions) -> PrettyPrinter;
+    /// Get associated matrix ring
+    fn get_matrix_group(&self) -> M<Self> {
+        M::new(*self)
+    }
+
+    /// Get associated term field
+    fn get_term_field(&self) -> TermField<Self> {
+        TermField::new(*self)
+    }
 }
+
+/// [Set] trait with additional bounds, limiting exposant set recursion depth.
+///
+/// Auto implemented.
+pub trait SetBound: Set<ExposantSet: Set<ExposantSet = Self::ExposantSet>> {}
+impl<T: Set<ExposantSet: Set<ExposantSet = Self::ExposantSet>>> SetBound for T {}
 
 /// [Group] trait with additional bounds, limiting exposant set recursion depth.
 ///
 /// Auto implemented.
-pub trait GroupBound: Group<ExposantSet: Group<ExposantSet = Self::ExposantSet>> {}
-impl<T: Group<ExposantSet: Group<ExposantSet = Self::ExposantSet>>> GroupBound for T {}
+pub trait GroupBound: Group<ExposantSet: Group> + SetBound {}
+impl<T: Group<ExposantSet: Group> + SetBound> GroupBound for T {}
 
 /// Same as [GroupBound] for [Ring] trait.
 ///
@@ -90,13 +110,13 @@ pub trait RingBound: Ring<ExposantSet: Ring> {}
 impl<T: Ring<ExposantSet: Ring>> RingBound for T {}
 
 /// Trait to cast an element from a set to another set.
-pub trait TryElementFrom<T: Group>: Group {
+pub trait TryElementFrom<T: Set>: Set {
     /// Try to convert an element of the set T into an element of the set E.
     fn try_from_element(value: T::Element) -> Result<Self::Element, TryCastError>;
 }
 
-// Specialize for T to T
-impl<T: Group> TryElementFrom<T> for T {
+// Default implementation
+impl<T: Set> TryElementFrom<T> for T {
     fn try_from_element(value: T::Element) -> Result<Self::Element, TryCastError> {
         Ok(value)
     }
@@ -134,59 +154,76 @@ pub trait Ring: GroupBound {
         (a.clone(), self.one())
     }
 
-    ///Custom parsing function, to parse element specific to this group. Check [commons::M::parse_expression] for example.
-    fn parse_expression(&self, _parser: &mut Parser) -> Result<Option<Term<Self>>, ParserError>
-    where
-        Self: GroupBound,
-        Self::ExposantSet: RingBound,
-    {
-        Ok(None)
-    }
-
     /// Normalize a mathematical expression using rules specific to this group. Check [commons::R::normalize]
-    fn normalize(&self, a: Term<Self>) -> Term<Self>
-    where
-        Self: GroupBound,
-        Self::ExposantSet: RingBound,
-    {
+    fn normalize(&self, a: Term<Self>) -> Term<Self> {
         a
     }
 
     /// Expand a mathematical expression using rules specific to this group. Check [commons::M::expand]
-    fn expand(&self, a: Term<Self>) -> Term<Self>
-    where
-        Self: GroupBound,
-        Self::ExposantSet: RingBound,
-    {
+    fn expand(&self, a: Term<Self>) -> Term<Self> {
         a
     }
 
     /// Simplify a mathematical expression using rules specific to this group. Check [commons::M::simplify]
-    fn simplify(&self, a: Term<Self>) -> Term<Self>
-    where
-        Self: GroupBound,
-        Self::ExposantSet: RingBound,
-    {
+    fn simplify(&self, a: Term<Self>) -> Term<Self> {
         a
     }
+}
 
-    /// Get associated term field
-    fn get_term_field(&self) -> TermField<Self>
+/// Parsing methods trait. The generic `N` represents the current recursion depth using the `typenum` crate.
+pub trait RingParseExpression<N> {
+    /// Custom parsing function, to parse element specific to this group. Check [commons::M::parse_expression] for example.
+    fn parse_expression<'a>(
+        &self,
+        _parser: &mut Parser<'a>,
+    ) -> Result<Option<Term<Self>>, ParserError>
     where
-        Self: GroupBound,
-        Self::ExposantSet: RingBound,
+        Self: Set,
     {
-        TermField::new(*self)
+        Ok(None)
     }
+}
 
-    /// Get associated matrix ring
-    fn get_matrix_ring(&self) -> M<Self>
-    where
-        Self: GroupBound,
-        Self::ExposantSet: RingBound,
-    {
-        M::new(*self)
-    }
+/// [RingParseExpression] trait, enforcing `Self::ExposantSet` to also implements `RingParseExpression`
+pub trait RingParseExpressionExponent<N>:
+    RingParseExpression<N> + Group<ExposantSet: RingParseExpression<N>>
+{
+}
+
+impl<N, T: RingParseExpression<N> + Group<ExposantSet: RingParseExpression<N>>>
+    RingParseExpressionExponent<N> for T
+{
+}
+
+/// [RingParseExpressionExponent] trait, enforcing `RingParseExpressionExponent<N>` where `N` is between 0 and 10.
+pub trait RingParseExpressionBound:
+    RingParseExpressionExponent<U0>
+    + RingParseExpressionExponent<U1>
+    + RingParseExpressionExponent<U2>
+    + RingParseExpressionExponent<U3>
+    + RingParseExpressionExponent<U4>
+    + RingParseExpressionExponent<U5>
+    + RingParseExpressionExponent<U6>
+    + RingParseExpressionExponent<U7>
+    + RingParseExpressionExponent<U8>
+    + RingParseExpressionExponent<U9>
+    + RingParseExpressionExponent<U10>
+{
+}
+
+impl<T> RingParseExpressionBound for T where
+    T: RingParseExpressionExponent<U0>
+        + RingParseExpressionExponent<U1>
+        + RingParseExpressionExponent<U2>
+        + RingParseExpressionExponent<U3>
+        + RingParseExpressionExponent<U4>
+        + RingParseExpressionExponent<U5>
+        + RingParseExpressionExponent<U6>
+        + RingParseExpressionExponent<U7>
+        + RingParseExpressionExponent<U8>
+        + RingParseExpressionExponent<U9>
+        + RingParseExpressionExponent<U10>
+{
 }
 
 /// Trait to cast an expression from a set to another set.
@@ -243,7 +280,7 @@ where
 }
 
 /// An euclidean ring is a [Ring] TODO
-pub trait EuclideanRing: RingBound {
+pub trait EuclideanRing: Ring {
     /// Return the remainder of the euclidean division of a by b.
     fn rem(&self, a: &Self::Element, b: &Self::Element) -> Self::Element;
     /// Compute the euclidean division of a by b, returning (quotient, remainder).
@@ -253,7 +290,7 @@ pub trait EuclideanRing: RingBound {
 }
 
 /// A field is a [Ring] TODO
-pub trait Field: RingBound {
+pub trait Field: Ring {
     /// Compute the inverse element of a.
     fn inv(&self, a: &Self::Element) -> Self::Element {
         self.try_inv(a)
@@ -262,7 +299,7 @@ pub trait Field: RingBound {
 }
 
 /// TODO
-pub trait Derivable: RingBound {
+pub trait Derivable: Ring {
     /// TODO rework derivative system
     fn derivative(&self, expr: &Self::Element, x: Symbol) -> Self::Element;
 }

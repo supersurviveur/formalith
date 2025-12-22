@@ -1,27 +1,24 @@
 //! Constant value expression.
 
-use crate::{
-    field::{GroupBound, RingBound},
-    printer::Print,
-};
+use crate::{field::Set, printer::Print};
 
 use super::{Flags, NORMALIZED};
 
 /// A constant in a mathematical expression, living in the algebraic set T
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Value<T: GroupBound> {
+pub struct Value<T: Set, V = <T as Set>::Element> {
     flags: u8,
-    pub(crate) value: T::Element,
-    pub(crate) ring: T,
+    pub(crate) value: V,
+    pub(crate) set: T,
 }
 
-impl<T: GroupBound> Value<T> {
+impl<T: Set> Value<T> {
     /// Create a new `Value` from an element of the set T
-    pub fn new(value: T::Element, ring: T) -> Self {
+    pub fn new(value: T::Element, set: T) -> Self {
         Self {
             flags: NORMALIZED,
             value,
-            ring,
+            set,
         }
     }
     /// Get the inner constant
@@ -30,7 +27,7 @@ impl<T: GroupBound> Value<T> {
     }
 }
 
-impl<T: GroupBound> Flags for Value<T> {
+impl<T: Set> Flags for Value<T> {
     fn get_flags(&self) -> u8 {
         self.flags
     }
@@ -39,7 +36,7 @@ impl<T: GroupBound> Flags for Value<T> {
     }
 }
 
-impl<T: RingBound> Print for Value<T> {
+impl<T: Set> Print for Value<T> {
     fn print(
         &self,
         _options: &crate::printer::PrintOptions,
@@ -52,6 +49,6 @@ impl<T: RingBound> Print for Value<T> {
         &self,
         options: &crate::printer::PrintOptions,
     ) -> crate::printer::PrettyPrinter {
-        self.ring.pretty_print(&self.value, options)
+        self.set.pretty_print(&self.value, options)
     }
 }

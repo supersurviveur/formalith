@@ -8,7 +8,7 @@ use owo_colors::{
 };
 use phf::phf_map;
 
-use crate::{field::RingBound, term::Term};
+use crate::{field::{RingBound}, term::Term};
 
 /// Rendering options are stored here. It can be created from some presets or completly custom.
 #[derive(Debug)]
@@ -44,19 +44,19 @@ impl PrintOptions {
 
 /// Structs containing printing options used to format output.
 #[derive(Debug)]
-pub struct Printer<'a> {
-    content: &'a dyn Print,
+pub struct Printer<'a, T> {
+    content: &'a T,
     options: PrintOptions,
 }
 
-impl<'a> Printer<'a> {
+impl<'a, T> Printer<'a, T> {
     /// Create a new Printer
-    pub fn new(content: &'a dyn Print, options: PrintOptions) -> Self {
+    pub fn new(content: &'a T, options: PrintOptions) -> Self {
         Self { content, options }
     }
 }
 
-impl Display for Printer<'_> {
+impl<T: Print> Display for Printer<'_, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Print::fmt(self.content, &self.options, f)
     }
@@ -65,14 +65,14 @@ impl Display for Printer<'_> {
 /// Elements and expressions which can be printed using options.
 pub trait Print: Debug {
     /// Create e new printer for self with specific options.
-    fn with_options<'a>(&'a self, options: PrintOptions) -> Printer<'a>
+    fn with_options<'a>(&'a self, options: PrintOptions) -> Printer<'a, Self>
     where
         Self: Sized,
     {
         Printer::new(self, options)
     }
     /// Create e new printer for self with default options for printing on the stdout.
-    fn stdout<'a>(&'a self) -> Printer<'a>
+    fn stdout<'a>(&'a self) -> Printer<'a, Self>
     where
         Self: Sized,
     {
