@@ -3,7 +3,10 @@
 use std::cmp::Ordering;
 
 use super::{Add, Mul, Pow, Term, Value};
-use crate::{field::{Ring, RingBound}, term::flags::Flags};
+use crate::{
+    field::{Group, RingBound},
+    term::{MergeTerm, flags::Flags},
+};
 
 impl<T: RingBound> std::ops::Add for &Term<T> {
     type Output = Term<T>;
@@ -139,7 +142,12 @@ impl<T: RingBound> std::ops::Mul for &Term<T> {
     fn mul(self, rhs: Self) -> Self::Output {
         debug_assert!(!self.needs_normalization());
         debug_assert!(!rhs.needs_normalization());
-        Term::Mul(Mul::new(vec![self.clone(), rhs.clone()], self.get_set())).normalize()
+        Term::Mul(Mul::new(
+            self.get_set().get_coefficient_set().nth(1),
+            vec![self.clone(), rhs.clone()],
+            self.get_set(),
+        ))
+        .normalize()
         // TODO, normalize mul directly like add
     }
 }
@@ -226,9 +234,10 @@ impl<T: RingBound> std::ops::Neg for &Term<T> {
         match new {
             Term::Value(ref mut value) => value.set.neg_assign(&mut value.value),
             Term::Add(ref add) => {
-                let ring = add.ring;
+                let ring = add.set;
                 new = Term::Mul(Mul::new(
-                    vec![new, Term::Value(Value::new(ring.neg(&ring.one()), ring))],
+                    ring.get_coefficient_set().nth(-1),
+                    vec![new],
                     ring,
                 ))
                 .normalize();
@@ -236,30 +245,29 @@ impl<T: RingBound> std::ops::Neg for &Term<T> {
             Term::Symbol(ref symbol) => {
                 let ring = symbol.ring;
                 new = Term::Mul(Mul::new(
-                    vec![new, Term::Value(Value::new(ring.neg(&ring.one()), ring))],
+                    ring.get_coefficient_set().nth(-1),
+                    vec![new],
                     ring,
                 ))
                 .normalize()
             }
             Term::Mul(ref mut mul) => {
                 let coeff = mul.get_coeff();
-                mul.set_coeff(mul.ring.neg(&coeff));
+                mul.set_coeff(mul.set.get_coefficient_set().neg(&coeff));
             }
             Term::Pow(ref pow) => {
                 let ring = pow.set;
                 new = Term::Mul(Mul::new(
-                    vec![new, Term::Value(Value::new(ring.neg(&ring.one()), ring))],
+                    ring.get_coefficient_set().nth(-1),
+                    vec![new],
                     ring,
                 ))
                 .normalize()
             }
             Term::Fun(ref fun) => {
                 let set = fun.get_set();
-                new = Term::Mul(Mul::new(
-                    vec![new, Term::Value(Value::new(set.neg(&set.one()), set))],
-                    set,
-                ))
-                .normalize()
+                new = Term::Mul(Mul::new(set.get_coefficient_set().nth(-1), vec![new], set))
+                    .normalize()
             }
         }
         new

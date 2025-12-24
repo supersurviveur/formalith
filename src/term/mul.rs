@@ -3,18 +3,20 @@
 use std::fmt::Display;
 
 use crate::{
-    field::{Ring, RingBound, Set},
+    field::{Group, Ring, RingBound, Set},
     printer::{PrettyPrinter, Print, PrintOptions},
+    term::Value,
 };
 
-use super::{Flags, Term, Value};
+use super::{Flags, Term};
 
 /// A product of expressions.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Mul<T: Set> {
     flags: u8,
+    pub(crate) coefficient: <T::ProductCoefficientSet as Set>::Element,
     pub(crate) factors: Vec<Term<T>>,
-    pub(crate) ring: T,
+    pub(crate) set: T,
 }
 
 impl<T: Set> Flags for Mul<T> {
@@ -28,19 +30,29 @@ impl<T: Set> Flags for Mul<T> {
 
 impl<T: Set> Mul<T> {
     /// Create a new product expression
-    pub fn new(factors: Vec<Term<T>>, ring: T) -> Self {
+    pub fn new(
+        coefficient: <T::ProductCoefficientSet as Set>::Element,
+        factors: Vec<Term<T>>,
+        ring: T,
+    ) -> Self {
         Self {
             flags: 0,
+            coefficient,
             factors,
-            ring,
+            set: ring,
         }
+    }
+    /// Create a new product expression
+    pub fn empty(ring: T) -> Self {
+        Self::new(ring.get_coefficient_set().nth(1), vec![], ring)
     }
     /// Create a new empty product, with an inner Vec with a defined capacity.
     pub fn with_capacity(capacity: usize, ring: T) -> Self {
         Self {
             flags: 0,
+            coefficient: ring.get_coefficient_set().nth(1),
             factors: Vec::with_capacity(capacity),
-            ring,
+            set: ring,
         }
     }
     /// Returns true if the multiplication is empty.
@@ -49,7 +61,7 @@ impl<T: Set> Mul<T> {
     }
     /// Get the number of terms in the sum.
     pub fn len(&self) -> usize {
-        self.factors.len()
+        self.factors.len() + 1
     }
     /// Add a factor at the end of the product, without normalizing it
     pub fn push(&mut self, value: Term<T>) {
@@ -65,28 +77,24 @@ impl<T: Set> Mul<T> {
     pub fn iter(&self) -> std::slice::Iter<'_, Term<T>> {
         self.factors.iter()
     }
-    /// Checks if the product have a constant coefficient.
+    /// Checks if the product have a constant coefficient not equal to one.
     pub fn has_coeff(&self) -> bool {
-        matches!(self.factors.last().unwrap(), Term::Value(_))
+        !self.set.get_coefficient_set().is_one(&self.coefficient)
     }
     /// Set the constant coefficient factor of the product
-    pub fn set_coeff(&mut self, coeff: T::Element) {
-        if let Some(Term::Value(v)) = self.factors.last_mut() {
-            v.value = coeff
-        } else {
-            self.factors.push(Term::Value(Value::new(coeff, self.ring)));
-        }
+    pub fn set_coeff(&mut self, coeff: <T::ProductCoefficientSet as Set>::Element) {
+        self.coefficient = coeff;
     }
 }
 
-impl<T: Ring> Mul<T> {
-    /// Return the constant coefficient factor of the product if it exists, one otherwise.
-    pub fn get_coeff(&self) -> T::Element {
-        if let Term::Value(v) = &self.factors.last().unwrap() {
-            v.value.clone()
-        } else {
-            self.ring.one()
-        }
+impl<T: Set> Mul<T> {
+    /// Return the constant coefficient factor of the product.
+    pub fn get_coeff(&self) -> <T::ProductCoefficientSet as Set>::Element {
+        self.coefficient.clone()
+    }
+    /// Return the constant coefficient factor of the product through a mutable reference.
+    pub fn get_coeff_mut(&mut self) -> &mut <T::ProductCoefficientSet as Set>::Element {
+        &mut self.coefficient
     }
 }
 
@@ -110,16 +118,20 @@ impl<'a, T: Set> IntoIterator for &'a Mul<T> {
     }
 }
 
-impl<T: RingBound> Print for Mul<T> {
+impl<T: Group> Mul<T> {
     fn print(&self, options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Print the cefficient at the beginning of the product
         if self.has_coeff() {
-            Self::group(self.factors.last().unwrap(), options, f)?;
+            Self::group(
+                &Term::Value(Value::new(
+                    self.coefficient.clone(),
+                    self.set.get_coefficient_set(),
+                )),
+                options,
+                f,
+            )?;
         }
         for (i, factor) in self.factors.iter().enumerate() {
-            if let Term::Value(_) = factor {
-                continue;
-            }
             Self::group(factor, options, f)?;
             if i != self.len() - 1 {
                 Self::operator("*", options, f)?;
@@ -127,20 +139,41 @@ impl<T: RingBound> Print for Mul<T> {
         }
         Ok(())
     }
+}
 
+impl<T: Group> Print for Mul<T> {
+    default fn print(
+        &self,
+        options: &PrintOptions,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        Self::print(self, options, f)
+    }
+
+    default fn pretty_print(&self, _options: &PrintOptions) -> crate::printer::PrettyPrinter {
+        todo!()
+    }
+}
+
+impl<T: RingBound> Print for Mul<T> {
+    fn print(&self, options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Self::print(self, options, f)
+    }
     fn pretty_print(&self, options: &PrintOptions) -> crate::printer::PrettyPrinter {
         let mut den: Option<PrettyPrinter> = None;
         let mut num: Option<PrettyPrinter> = None;
         // Print the cefficient at the beginning of the product
         if self.has_coeff() {
-            num = Some(Print::pretty_print(self.factors.last().unwrap(), options))
+            num = Some(Print::pretty_print(
+                &Term::Value(Value::new(
+                    self.coefficient.clone(),
+                    self.set.get_coefficient_set(),
+                )),
+                options,
+            ))
         }
         for factor in self.factors.iter() {
-            if let Term::Value(_) = factor {
-                continue;
-            }
             let printed = match factor {
-                Term::Value(_) => continue,
                 Term::Pow(pow) if pow.exposant.is_strictly_negative() => {
                     let mut factor = pow.clone();
                     **factor.exposant = -&**factor.exposant;
@@ -173,7 +206,7 @@ impl<T: RingBound> Print for Mul<T> {
         let mut num = if let Some(num) = num {
             num
         } else {
-            Print::pretty_print(&Term::one(self.ring), options)
+            Print::pretty_print(&Term::one(self.set), options)
         };
         if let Some(den) = den {
             num.vertical_concat("─", &den);
@@ -182,7 +215,7 @@ impl<T: RingBound> Print for Mul<T> {
     }
 }
 
-impl<T: RingBound> Display for Mul<T> {
+impl<T: Group> Display for Mul<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Print::fmt(self, &PrintOptions::default(), f)
     }

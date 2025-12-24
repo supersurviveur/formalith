@@ -11,6 +11,7 @@ use tracing_subscriber::filter::LevelFilter;
 
 pub fn main() {
     tracing_subscriber::fmt::init();
+    println!("{}", parse!("x^2 + x^2", R));
     println!("{}", parse!("(x+y)^3", R).expand());
     println!("{}", parse!("71/1200 + (x^6*2)^-1", R));
 
@@ -75,6 +76,7 @@ pub fn main() {
             .to_polynomial()
             .gcd(&parse!("x^2", R).to_polynomial())
     );
+    println!("euh: {:#?}", parse!("x^(2*n)", R));
     println!(
         "{}",
         parse!("x^(2*n)", R)

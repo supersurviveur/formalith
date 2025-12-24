@@ -3,7 +3,7 @@
 use std::fmt::Display;
 
 use crate::{
-    field::{RingBound, Set},
+    field::{Group, Set},
     printer::{PrettyPrinter, Print, PrintOptions},
 };
 
@@ -14,7 +14,7 @@ use super::{Flags, Term, Value};
 pub struct Add<T: Set> {
     flags: u8,
     pub(crate) terms: Vec<Term<T>>,
-    pub(crate) ring: T,
+    pub(crate) set: T,
 }
 
 impl<T: Set> Flags for Add<T> {
@@ -28,19 +28,19 @@ impl<T: Set> Flags for Add<T> {
 
 impl<T: Set> Add<T> {
     /// Create an empty sum expression.
-    pub fn new(terms: Vec<Term<T>>, ring: T) -> Self {
+    pub fn new(terms: Vec<Term<T>>, set: T) -> Self {
         Self {
             flags: 0,
             terms,
-            ring,
+            set,
         }
     }
     /// Create a new empty sum, with an inner vec with a defined capacity.
-    pub fn with_capacity(capacity: usize, ring: T) -> Self {
+    pub fn with_capacity(capacity: usize, set: T) -> Self {
         Self {
             flags: 0,
             terms: Vec::with_capacity(capacity),
-            ring,
+            set,
         }
     }
     /// Returns true if the addition is empty.
@@ -82,7 +82,7 @@ impl<'a, T: Set> IntoIterator for &'a Add<T> {
     }
 }
 
-impl<T: RingBound> Print for Add<T> {
+impl<T: Group> Print for Add<T> {
     fn print(
         &self,
         options: &crate::printer::PrintOptions,
@@ -90,22 +90,22 @@ impl<T: RingBound> Print for Add<T> {
     ) -> std::fmt::Result {
         for (i, term) in self.terms.iter().enumerate() {
             match term {
-                Term::Value(Value {
-                    value, set: ring, ..
-                }) if term.is_strictly_negative() => {
+                Term::Value(Value { value, set, .. }) if term.is_strictly_negative() => {
                     if i != 0 {
                         Self::operator("-", options, f)?;
                     }
-                    Print::print(&Value::new(ring.neg(value), *ring), options, f)?;
+                    Print::print(&Value::new(set.neg(value), *set), options, f)?;
                 }
                 Term::Mul(mul)
-                    if mul.has_coeff()
-                        && mul.factors.last().unwrap().is_strictly_negative()
+                    if mul
+                        .set
+                        .get_coefficient_set()
+                        .is_strictly_negative(&mul.get_coeff())
                         && i != 0 =>
                 {
                     let mut mul = mul.clone();
-                    let last = mul.factors.last_mut().unwrap();
-                    mul.ring.neg_assign(&mut unsafe { last.as_value() }.value);
+                    let coeff = &mut mul.coefficient;
+                    mul.set.get_coefficient_set().neg_assign(coeff);
                     Self::operator("-", options, f)?;
                     Print::print(&mul, options, f)?;
                 }
@@ -124,10 +124,8 @@ impl<T: RingBound> Print for Add<T> {
         let mut res: Option<PrettyPrinter> = None;
         for term in self.terms.iter() {
             match term {
-                Term::Value(Value {
-                    value, set: ring, ..
-                }) if term.is_strictly_negative() => {
-                    let elem = Print::pretty_print(&Value::new(ring.neg(value), *ring), options);
+                Term::Value(Value { value, set, .. }) if term.is_strictly_negative() => {
+                    let elem = Print::pretty_print(&Value::new(set.neg(value), *set), options);
                     if let Some(res) = &mut res {
                         res.concat("-", true, &elem);
                     } else {
@@ -135,18 +133,15 @@ impl<T: RingBound> Print for Add<T> {
                     }
                 }
                 Term::Mul(mul)
-                    if {
-                        match mul.factors.last() {
-                            Some(Term::Value(_)) => {
-                                mul.factors.last().unwrap().is_strictly_negative()
-                            }
-                            _ => false,
-                        }
-                    } && res.is_some() =>
+                    if mul
+                        .set
+                        .get_coefficient_set()
+                        .is_strictly_negative(&mul.get_coeff())
+                        && res.is_some() =>
                 {
                     let mut mul = mul.clone();
-                    let last = mul.factors.last_mut().unwrap();
-                    mul.ring.neg_assign(&mut unsafe { last.as_value() }.value);
+                    let coeff = &mut mul.coefficient;
+                    mul.set.get_coefficient_set().neg_assign(coeff);
                     let elem = Print::pretty_print(&mul, options);
                     res.as_mut().unwrap().concat("-", true, &elem);
                 }
@@ -164,7 +159,7 @@ impl<T: RingBound> Print for Add<T> {
     }
 }
 
-impl<T: RingBound> Display for Add<T> {
+impl<T: Group> Display for Add<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Print::fmt(self, &PrintOptions::default(), f)
     }

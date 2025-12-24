@@ -26,13 +26,13 @@ type PolynomElement<V, U, T> = (Vec<Monom<V, U>>, <T as Set>::Element);
 
 /// A multivariate polynomial, living in `T` with exposant in `U`. Variables can be any type implementing [Monomial], like [crate::context::Symbol] or [Term].
 #[derive(Debug, Clone, PartialEq, Hash)]
-pub struct MultivariatePolynomial<V: Monomial, T: Set, U: Set> {
+pub struct MultivariatePolynomial<V, T: Set, U: Set> {
     terms: Vec<PolynomElement<V, U, T>>,
     set: T,
     exposant_set: U,
 }
 
-impl<V: Monomial, T: Set, U: Set> MultivariatePolynomial<V, T, U> {
+impl<V, T: Set, U: Set> MultivariatePolynomial<V, T, U> {
     /// Create a new polynomial from its terms and sets.
     pub fn new(terms: Vec<PolynomElement<V, U, T>>, set: T, exposant_set: U) -> Self {
         Self {
@@ -56,26 +56,7 @@ impl<V: Monomial, T: Set, U: Set> MultivariatePolynomial<V, T, U> {
     }
 }
 
-impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
-    /// Create a new monomial containing `var`.
-    pub fn variable(var: V, set: T, exposant_set: U) -> Self {
-        Self {
-            terms: vec![(vec![(var, exposant_set.one())], set.one())],
-            set,
-            exposant_set,
-        }
-    }
-
-    /// Check if the polynom is the constant 1
-    pub fn is_one(&self) -> bool {
-        self.is_constant() && self.set.is_one(&self.terms[0].1)
-    }
-
-    /// Create a new constant polynomial equal to one.
-    pub fn one(set: T, exposant_set: U) -> Self {
-        Self::constant(set.one(), set, exposant_set)
-    }
-
+impl<V, T: Group, U: Set> MultivariatePolynomial<V, T, U> {
     /// Check if the polynom is the constant 0
     pub fn is_zero(&self) -> bool {
         self.terms.is_empty() || self.terms.iter().all(|(_, c)| self.set.is_zero(c))
@@ -85,7 +66,31 @@ impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
     pub fn zero(set: T, exposant_set: U) -> Self {
         Self::constant(set.zero(), set, exposant_set)
     }
+}
 
+impl<V, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
+    /// Create a new monomial containing `var`.
+    pub fn variable(var: V, set: T, exposant_set: U) -> Self {
+        Self {
+            terms: vec![(vec![(var, exposant_set.one())], set.one())],
+            set,
+            exposant_set,
+        }
+    }
+}
+
+impl<V, T: Ring, U: Set> MultivariatePolynomial<V, T, U> {
+    /// Check if the polynom is the constant 1
+    pub fn is_one(&self) -> bool {
+        self.is_constant() && self.set.is_one(&self.terms[0].1)
+    }
+    /// Create a new constant polynomial equal to one.
+    pub fn one(set: T, exposant_set: U) -> Self {
+        Self::constant(set.one(), set, exposant_set)
+    }
+}
+
+impl<V: Monomial, T: Set, U: Group> MultivariatePolynomial<V, T, U> {
     fn combine_vars(
         vars1: &[(V, U::Element)],
         vars2: &[(V, U::Element)],
@@ -312,7 +317,7 @@ impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
         for (v, e) in denom_vars {
             match var_map.get_mut(v) {
                 Some(current_exp) => {
-                    println!("{} < {} : {}", current_exp, e, *current_exp < *e);
+                    // println!("{} < {} : {}", current_exp, e, *current_exp < *e);
                     if *current_exp < *e {
                         return None;
                     }
