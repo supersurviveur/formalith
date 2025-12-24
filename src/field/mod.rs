@@ -11,6 +11,7 @@ use crate::{
 
 pub mod commons;
 pub use commons::*;
+use malachite::Integer;
 use typenum::{U0, U1, U2, U3, U4, U5, U6, U7, U8, U9, U10};
 
 /// A set.
@@ -18,12 +19,18 @@ pub trait Set: Clone + Copy + fmt::Debug + PartialEq + Eq + Hash + 'static {
     /// The type of the elements living in this set
     type Element: Clone + fmt::Debug + fmt::Display + PartialEq + Eq + PartialOrd + Hash;
 
-    /// The set where exposants live. Mostly [const@commons::Z], but it can be any ring,
+    /// The set where exposants live. Mostly [const@commons::Z], but it can be any group,
     /// like [const@R] for real numbers since power is not only a notation for `x*x*...*x` but a defined operation.
-    type ExposantSet: Group;
+    type ExposantSet: Group = Z<Integer>;
+
+    /// The set where coefficients in product live. Mostly [const@commons::Z], but it can be any ring.
+    type ProductCoefficientSet: Ring = Z<Integer>;
 
     /// Get the exposant set for this set
     fn get_exposant_set(&self) -> Self::ExposantSet;
+
+    /// Get the coefficient set for this set
+    fn get_coefficient_set(&self) -> Self::ProductCoefficientSet;
 
     /// Print an element of this set.
     fn print(
@@ -51,6 +58,8 @@ pub trait Group: Set {
     fn is_zero(&self, a: &Self::Element) -> bool {
         *a == self.zero()
     }
+    /// Get the nth element by computing `n * 1`
+    fn nth(&self, nth: i64) -> Self::Element;
     /// Add two elements of this group.
     fn add(&self, a: &Self::Element, b: &Self::Element) -> Self::Element;
     /// Add two elements of this group into the first one.
@@ -76,6 +85,26 @@ pub trait Group: Set {
 
     /// Compares two elements of this group if possible, returns `None` otherwise
     fn partial_cmp(&self, a: &Self::Element, b: &Self::Element) -> Option<Ordering>;
+
+    /// Checks if a is greater or equal than zero in this group.
+    fn is_positive(&self, a: &Self::Element) -> bool {
+        self.is_zero(a) || self.is_strictly_positive(a)
+    }
+
+    /// Checks if a is greater than zero in this group.
+    fn is_strictly_positive(&self, a: &Self::Element) -> bool {
+        matches!(self.partial_cmp(a, &self.zero()), Some(Ordering::Greater))
+    }
+
+    /// Checks if a is less or equal than zero in this group.
+    fn is_negative(&self, a: &Self::Element) -> bool {
+        self.is_zero(a) || self.is_strictly_negative(a)
+    }
+
+    /// Checks if a is less than zero in this group.
+    fn is_strictly_negative(&self, a: &Self::Element) -> bool {
+        matches!(self.partial_cmp(a, &self.zero()), Some(Ordering::Less))
+    }
 
     /// Parses a string to an element of this group
     fn parse_litteral(&self, value: &str) -> Result<Self::Element, String>;
@@ -137,8 +166,6 @@ pub trait Ring: GroupBound {
     fn is_one(&self, a: &Self::Element) -> bool {
         *a == self.one()
     }
-    /// Get the nth element by computing `n * 1`
-    fn nth(&self, nth: i64) -> Self::Element;
     /// Multiply two elements of this ring
     fn mul(&self, a: &Self::Element, b: &Self::Element) -> Self::Element;
     /// Multiply two elements of this ring into a
@@ -186,12 +213,23 @@ pub trait RingParseExpression<N> {
 
 /// [RingParseExpression] trait, enforcing `Self::ExposantSet` to also implements `RingParseExpression`
 pub trait RingParseExpressionExponent<N>:
-    RingParseExpression<N> + Group<ExposantSet: RingParseExpression<N>>
+    RingParseExpression<N>
+    + Group<
+        ExposantSet: RingParseExpression<N> + Group<ProductCoefficientSet: RingParseExpression<N>>,
+        ProductCoefficientSet: RingParseExpression<N>,
+    >
 {
 }
 
-impl<N, T: RingParseExpression<N> + Group<ExposantSet: RingParseExpression<N>>>
-    RingParseExpressionExponent<N> for T
+impl<
+    N,
+    T: RingParseExpression<N>
+        + Group<
+            ExposantSet: RingParseExpression<N>
+                             + Group<ProductCoefficientSet: RingParseExpression<N>>,
+            ProductCoefficientSet: RingParseExpression<N>,
+        >,
+> RingParseExpressionExponent<N> for T
 {
 }
 
@@ -235,6 +273,9 @@ pub trait TryExprFrom<From: Ring>: Ring {
 impl<From: RingBound, To: RingBound + TryElementFrom<From>> TryExprFrom<From> for To
 where
     To::ExposantSet: TryElementFrom<From::ExposantSet>,
+    To::ProductCoefficientSet: TryElementFrom<From::ProductCoefficientSet>,
+    <To::ExposantSet as Set>::ProductCoefficientSet:
+        TryElementFrom<<From::ExposantSet as Set>::ProductCoefficientSet>,
 {
     fn try_from_expr(&self, value: Term<From>) -> Result<Term<Self>, TryCastError> {
         match value {
@@ -253,14 +294,21 @@ where
                 *self,
             )
             .into()),
-            Term::Mul(mul) => Ok(Mul::new(
-                mul.factors
-                    .into_iter()
-                    .map(|x| self.try_from_expr(x))
-                    .collect::<Result<Vec<_>, _>>()?,
-                *self,
-            )
-            .into()),
+            Term::Mul(mul) => {
+                Ok(
+                    Mul::new(
+                        <Self::ProductCoefficientSet as TryElementFrom<
+                            From::ProductCoefficientSet,
+                        >>::try_from_element(mul.coefficient)?,
+                        mul.factors
+                            .into_iter()
+                            .map(|x| self.try_from_expr(x))
+                            .collect::<Result<Vec<_>, _>>()?,
+                        *self,
+                    )
+                    .into(),
+                )
+            }
             Term::Pow(pow) => Ok(Pow::new(
                 Box::new(self.try_from_expr((*pow.base).clone())?),
                 Box::new(

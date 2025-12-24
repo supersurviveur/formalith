@@ -3,7 +3,7 @@
 use std::cmp::Ordering;
 
 use crate::{
-    field::{Field, Group, Ring, Set, RingBound},
+    field::{Field, Group, Ring, RingBound, Set},
     printer::Print,
     term::flags::Flags,
 };
@@ -31,7 +31,12 @@ impl<T: RingBound> Set for TermField<T> {
 
     type ExposantSet = Self;
 
+    type ProductCoefficientSet = Self;
+
     fn get_exposant_set(&self) -> Self::ExposantSet {
+        *self
+    }
+    fn get_coefficient_set(&self) -> Self::ProductCoefficientSet {
         *self
     }
 
@@ -56,6 +61,10 @@ impl<T: RingBound> Set for TermField<T> {
 impl<T: RingBound> Group for TermField<T> {
     fn zero(&self) -> Self::Element {
         Term::Value(Value::new(self.get_set().zero(), *self.get_set()))
+    }
+
+    fn nth(&self, nth: i64) -> Self::Element {
+        Term::Value(Value::new(self.get_set().nth(nth), *self.get_set()))
     }
 
     fn add(&self, a: &Self::Element, b: &Self::Element) -> Self::Element {
@@ -86,10 +95,6 @@ impl<T: RingBound> Ring for TermField<T> {
 
     fn mul(&self, a: &Self::Element, b: &Self::Element) -> Self::Element {
         a * b
-    }
-
-    fn nth(&self, nth: i64) -> Self::Element {
-        Term::Value(Value::new(self.get_set().nth(nth), *self.get_set()))
     }
 
     fn try_inv(&self, a: &Self::Element) -> Option<Self::Element> {

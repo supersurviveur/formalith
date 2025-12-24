@@ -3,7 +3,7 @@
 use std::{fmt::Display, mem::ManuallyDrop};
 
 use crate::{
-    field::{RingBound, Set},
+    field::{Group, RingBound, Set},
     printer::{Print, PrintOptions},
 };
 
@@ -51,6 +51,19 @@ impl<T: Set, E: Set> Drop for Pow<T, E> {
         }
     }
 }
+impl<T: Group> Print for Pow<T> {
+    default fn print(
+        &self,
+        _options: &PrintOptions,
+        _f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        todo!()
+    }
+
+    default fn pretty_print(&self, _options: &PrintOptions) -> crate::printer::PrettyPrinter {
+        todo!()
+    }
+}
 
 impl<T: RingBound> Print for Pow<T> {
     fn print(&self, options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -93,7 +106,8 @@ impl<T: RingBound> Print for Pow<T> {
         }
     }
 }
-impl<T: RingBound> Display for Pow<T> {
+
+impl<T: Group> Display for Pow<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Print::fmt(self, &PrintOptions::default(), f)
     }

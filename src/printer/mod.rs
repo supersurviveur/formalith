@@ -8,7 +8,7 @@ use owo_colors::{
 };
 use phf::phf_map;
 
-use crate::{field::{RingBound}, term::Term};
+use crate::{field::Group, term::Term};
 
 /// Rendering options are stored here. It can be created from some presets or completly custom.
 #[derive(Debug)]
@@ -107,7 +107,7 @@ pub trait Print: Debug {
 
     /// Add paren to the expr if needed.
     #[inline(always)]
-    fn group<T: RingBound>(
+    fn group<T: Group>(
         elem: &Term<T>,
         options: &PrintOptions,
         f: &mut std::fmt::Formatter<'_>,

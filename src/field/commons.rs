@@ -43,8 +43,11 @@ impl<T: Clone> Copy for Z<T> {}
 impl Set for Z<Integer> {
     type Element = Integer;
 
-    type ExposantSet = Z<malachite::Integer>; // TODO change type
+    type ExposantSet = Z<Integer>; // TODO change type
     fn get_exposant_set(&self) -> Self::ExposantSet {
+        *self
+    }
+    fn get_coefficient_set(&self) -> Self::ProductCoefficientSet {
         *self
     }
     fn print(
@@ -67,6 +70,10 @@ impl Set for Z<Integer> {
 impl Group for Z<Integer> {
     fn zero(&self) -> Self::Element {
         Integer::ZERO
+    }
+
+    fn nth(&self, nth: i64) -> <Self::ProductCoefficientSet as Set>::Element {
+        Integer::const_from_signed(nth)
     }
 
     fn add(&self, a: &Self::Element, b: &Self::Element) -> Self::Element {
@@ -94,10 +101,6 @@ impl Ring for Z<Integer> {
 
     fn mul(&self, a: &Self::Element, b: &Self::Element) -> Self::Element {
         a * b
-    }
-
-    fn nth(&self, nth: i64) -> Self::Element {
-        Integer::const_from_signed(nth)
     }
 
     fn try_inv(&self, a: &Self::Element) -> Option<Self::Element> {
@@ -128,7 +131,11 @@ impl<T: Clone> Copy for R<T> {}
 impl Set for R<malachite::rational::Rational> {
     type Element = Rational;
     type ExposantSet = R<Rational>;
+    type ProductCoefficientSet = R<Rational>;
     fn get_exposant_set(&self) -> Self::ExposantSet {
+        *self
+    }
+    fn get_coefficient_set(&self) -> Self::ProductCoefficientSet {
         *self
     }
     fn print(
@@ -165,6 +172,10 @@ impl Group for R<malachite::rational::Rational> {
         malachite::rational::Rational::ZERO
     }
 
+    fn nth(&self, nth: i64) -> <Self::ProductCoefficientSet as Set>::Element {
+        Rational::const_from_signed(nth)
+    }
+
     fn add(&self, a: &Self::Element, b: &Self::Element) -> Self::Element {
         a + b
     }
@@ -191,10 +202,6 @@ impl Ring for R<Rational> {
 
     fn mul(&self, a: &Self::Element, b: &Self::Element) -> Self::Element {
         a * b
-    }
-
-    fn nth(&self, nth: i64) -> Self::Element {
-        Rational::const_from_signed(nth)
     }
 
     fn try_inv(&self, a: &Self::Element) -> Option<Self::Element> {
@@ -226,17 +233,12 @@ impl Ring for R<Rational> {
                         (Natural::ONE, denominator)
                     };
                     let mul = term::Mul::new(
-                        vec![
-                            Term::Value(Value::new(
-                                Rational::from_sign_and_naturals(
-                                    exposant.value.sign() == Ordering::Greater,
-                                    numerator.clone(),
-                                    passed_denominator,
-                                ),
-                                *self,
-                            )),
-                            (**base.exposant).clone(),
-                        ],
+                        Rational::from_sign_and_naturals(
+                            exposant.value.sign() == Ordering::Greater,
+                            numerator.clone(),
+                            passed_denominator,
+                        ),
+                        vec![(**base.exposant).clone()],
                         self.get_exposant_set(),
                     );
 
@@ -356,6 +358,7 @@ impl Ring for R<Rational> {
                     }
                 } else if let (Term::Mul(mul), _) = (&**base, &**exposant) {
                     return Mul::new(
+                        mul.coefficient.clone(),
                         mul.into_iter()
                             .map(|x| term::Pow::new(x.clone(), (**exposant).clone(), *self).into())
                             .collect(),
@@ -444,8 +447,12 @@ impl<T> M<T> {
 impl<T: RingBound> Set for M<T> {
     type Element = VectorSpaceElement<TermField<T>, Matrix<TermField<T>>>;
     type ExposantSet = M<T::ExposantSet>;
+    type ProductCoefficientSet = Self;
     fn get_exposant_set(&self) -> Self::ExposantSet {
         self.scalar_sub_set.get_exposant_set().get_matrix_group()
+    }
+    fn get_coefficient_set(&self) -> Self::ProductCoefficientSet {
+        *self
     }
     fn print(
         &self,
@@ -473,6 +480,10 @@ impl<T: RingBound> Set for M<T> {
 impl<T: RingBound> Group for M<T> {
     fn zero(&self) -> Self::Element {
         VectorSpaceElement::Scalar(self.scalar_sub_set.get_term_field().zero())
+    }
+
+    fn nth(&self, nth: i64) -> <Self::ProductCoefficientSet as Set>::Element {
+        VectorSpaceElement::Scalar(self.scalar_sub_set.get_term_field().nth(nth))
     }
 
     fn add(&self, a: &Self::Element, b: &Self::Element) -> Self::Element {
@@ -514,11 +525,6 @@ impl<T: RingBound> Ring for M<T> {
     fn one(&self) -> Self::Element {
         VectorSpaceElement::Scalar(self.scalar_sub_set.get_term_field().one())
     }
-
-    fn nth(&self, nth: i64) -> Self::Element {
-        VectorSpaceElement::Scalar(self.scalar_sub_set.get_term_field().nth(nth))
-    }
-
     fn mul(&self, _a: &Self::Element, _b: &Self::Element) -> Self::Element {
         todo!()
     }

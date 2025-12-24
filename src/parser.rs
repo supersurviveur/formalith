@@ -8,8 +8,8 @@ use std::iter::Peekable;
 use std::ops::{Range, Sub};
 
 use crate::context::{Context, Symbol};
-use crate::field::{M, Ring, RingBound, RingParseExpression, RingParseExpressionBound};
-use crate::term::{Fun, SymbolTerm, Term, Value};
+use crate::field::{M, Ring, RingBound, RingParseExpression, RingParseExpressionBound, Set};
+use crate::term::{Fun, Mul, SymbolTerm, Term, Value};
 
 use lexer::{Lexer, Token, TokenKind};
 use typenum::{Diff, U0, U1, U10, UInt};
@@ -55,7 +55,7 @@ impl Display for ParserError {
 }
 
 /// A parser over a string input.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Parser<'a> {
     input: &'a str,
     lexer: Peekable<Lexer<'a>>,
@@ -83,7 +83,7 @@ impl<'a> Parser<'a> {
 }
 
 /// Trait used by parser to implement some methods with specialization.
-pub trait ParserTraitBounded<E: Ring, N> {
+pub trait ParserTraitBounded<E: Set, N> {
     /// Parse an expression, which can be a literal, a sum, a group ()...
     fn parse_expression_bounded(
         &mut self,
@@ -213,23 +213,28 @@ where
     UInt<U, B>: Sub<U1>,
     Self: ParserTraitBounded<M<E>, U>,
     Self: ParserTraitBounded<<E as crate::field::Set>::ExposantSet, Diff<UInt<U, B>, U1>>,
+    E::ProductCoefficientSet: RingParseExpression<UInt<U, B>>,
 {
     fn parse_expression_bounded(
         &mut self,
         priority: usize,
         set: E,
     ) -> Result<Option<Term<E>>, ParserError> {
+        let mut self_in_coefficient_set = self.clone();
         let node = set.parse_expression(self)?;
         let node = node.map_or_else(
             || self.parse_unary::<E, UInt<U, B>>(priority, set),
             |n| Ok(Some(n)),
         )?;
-        let node = node.map_or_else(|| self.parse_literal(set), |n| Ok(Some(n)))?;
+        let node_in_coefficient_set =
+            self_in_coefficient_set.parse_literal(set.get_coefficient_set());
+        let node = node.map_or_else(|| self.parse_literal_term(set), |n| Ok(Some(n)))?;
         let node = node.map_or_else(|| self.parse_symbol(set), |n| Ok(Some(n)))?;
         let node = node.map_or_else(|| self.parse_group::<E, UInt<U, B>>(set), |n| Ok(Some(n)))?;
-        match node {
-            None => Ok(None),
-            Some(mut node) => {
+
+        match (node, node_in_coefficient_set) {
+            (None, Err(_)) | (None, Ok(None)) => Ok(None),
+            (Some(mut node), node_in_coefficient_set) => {
                 if let (TokenKind::OpenParen, Term::Symbol(symbol)) = (&self.token.kind, &node) {
                     self.next_token();
                     let arg_set = match symbol.symbol {
@@ -252,8 +257,12 @@ where
                     && priority < op.as_ref().unwrap().get_priority()
                 {
                     self.next_token();
-                    let (new_node, parsed) =
-                        self.parse_binary_expr::<E, UInt<U, B>>(node, op.unwrap(), set)?;
+                    let (new_node, parsed) = self.parse_binary_expr::<E, UInt<U, B>>(
+                        node,
+                        node_in_coefficient_set.clone(),
+                        op.unwrap(),
+                        set,
+                    )?;
                     node = new_node;
                     if !parsed {
                         break;
@@ -262,6 +271,7 @@ where
                 }
                 Ok(Some(node))
             }
+            _ => todo!(),
         }
     }
 }
@@ -269,6 +279,10 @@ impl Parser<'_> {
     fn parse_binary_expr<E: RingBound, N>(
         &mut self,
         current: Term<E>,
+        current_in_coefficient_set: Result<
+            Option<<<E as Set>::ProductCoefficientSet as Set>::Element>,
+            ParserError,
+        >,
         op: Op,
         set: E,
     ) -> Result<(Term<E>, bool), ParserError>
@@ -294,7 +308,13 @@ impl Parser<'_> {
                 match op {
                     Op::Add => current + right,
                     Op::Substract => current - right,
-                    Op::Multiply => current * right,
+                    Op::Multiply => {
+                        if let Ok(Some(current)) = current_in_coefficient_set {
+                            Term::Mul(Mul::new(current, vec![right], set)).normalize()
+                        } else {
+                            current * right
+                        }
+                    }
                     Op::Divide => current / right,
                     Op::Pow => unreachable!(),
                 },
@@ -304,14 +324,16 @@ impl Parser<'_> {
         Ok((current, false))
     }
 
-    fn parse_literal<E: Ring>(&mut self, set: E) -> Result<Option<Term<E>>, ParserError> {
+    fn parse_literal_term<E: Ring>(&mut self, set: E) -> Result<Option<Term<E>>, ParserError> {
+        Ok(self
+            .parse_literal(set)?
+            .map(|lit| Term::Value(Value::new(lit, set))))
+    }
+    fn parse_literal<E: Ring>(&mut self, set: E) -> Result<Option<E::Element>, ParserError> {
         let content = &self.input[self.span()];
         match &self.token.kind {
             TokenKind::Literal { .. } => {
-                let lit = Term::Value(Value::new(
-                    set.parse_litteral(content).map_err(ParserError::new)?,
-                    set,
-                ));
+                let lit = set.parse_litteral(content).map_err(ParserError::new)?;
                 self.next_token();
                 Ok(Some(lit))
             }
