@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     field::{Group, Ring, Set},
-    printer::{PrettyPrinter, Print, PrintOptions},
+    printer::{PrettyPrint, PrettyPrinter, Print, PrintOptions},
 };
 
 /// A matrix with coefficients living in `T`.
@@ -146,7 +146,8 @@ impl<T: Set> Print for Matrix<T> {
         Self::group_delim("]", options, f)?;
         Ok(())
     }
-
+}
+impl<T: Set> PrettyPrint for Matrix<T> {
     fn pretty_print(&self, options: &PrintOptions) -> crate::printer::PrettyPrinter {
         let mut coeffs: Vec<_> = self
             .data
@@ -199,9 +200,15 @@ impl<T: Set> Print for Matrix<T> {
     }
 }
 
+impl<T: Set> Display for Matrix<T> {
+    default fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        todo!()
+    }
+}
+
 impl<T: Group> Display for Matrix<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Print::fmt(self, &PrintOptions::default(), f)
+        PrettyPrint::fmt(self, &PrintOptions::default(), f)
     }
 }
 

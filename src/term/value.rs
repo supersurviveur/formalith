@@ -1,6 +1,6 @@
 //! Constant value expression.
 
-use crate::{field::Set, printer::Print};
+use crate::{field::Set, printer::{PrettyPrint, Print}};
 
 use super::{Flags, NORMALIZED};
 
@@ -44,7 +44,8 @@ impl<T: Set> Print for Value<T> {
     ) -> std::fmt::Result {
         write!(f, "{}", self.value)
     }
-
+}
+impl<T: Set> PrettyPrint for Value<T> {
     fn pretty_print(
         &self,
         options: &crate::printer::PrintOptions,

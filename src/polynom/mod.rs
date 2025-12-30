@@ -9,17 +9,17 @@ use std::{
 use tracing::trace;
 
 use crate::{
-    field::{Group, Ring, RingBound, Set, TryElementFrom},
-    printer::{PrettyPrinter, Print, PrintOptions},
-    term::{Term, TermField},
+    field::{Group, Ring, Set, TryElementFrom},
+    printer::{PrettyPrint, PrettyPrinter, Print, PrintOptions},
+    term::{Term, TermSet},
 };
 
 /// Types must implement this trait to be used as variables inside polynomials.
 ///
 /// Auto implemented.
-pub trait Monomial: Debug + Clone + PartialEq + Eq + Hash + PartialOrd + Print {}
+pub trait Monomial: Debug + Clone + PartialEq + Eq + Hash + PartialOrd + PrettyPrint {}
 
-impl<T: Debug + Clone + PartialEq + Eq + Hash + PartialOrd + Print> Monomial for T {}
+impl<T: Debug + Clone + PartialEq + Eq + Hash + PartialOrd + PrettyPrint> Monomial for T {}
 
 type Monom<V, U> = (V, <U as Set>::Element);
 type PolynomElement<V, U, T> = (Vec<Monom<V, U>>, <T as Set>::Element);
@@ -147,10 +147,10 @@ pub trait ToTerm<Out: Set> {
     fn to_term(&self) -> Term<Out>;
 }
 
-impl<V: Monomial, T: RingBound, U: Ring> ToTerm<T> for MultivariatePolynomial<V, T, U>
+impl<V: Monomial, T: Ring, U: Ring> ToTerm<T> for MultivariatePolynomial<V, T, U>
 where
     Term<T>: From<V>,
-    Term<T::ExposantSet>: From<U::Element>,
+    Term<T::ExponantSet>: From<U::Element>,
 {
     fn to_term(&self) -> Term<T> {
         let mut res = Term::zero(self.set);
@@ -165,9 +165,9 @@ where
         res
     }
 }
-impl<T: Ring> ToTerm<T> for MultivariatePolynomial<Term<T>, TermField<T>, TermField<T::ExposantSet>>
+impl<T: Ring> ToTerm<T> for MultivariatePolynomial<Term<T>, TermSet<T>, TermSet<T::ExponantSet>>
 where
-    <T as Set>::ExposantSet: Ring,
+    <T as Set>::ExponantSet: Ring,
 {
     fn to_term(&self) -> Term<T> {
         let mut res = Term::zero(*self.set.get_set());
@@ -597,7 +597,7 @@ where
     }
 }
 
-impl<V: Monomial + Print, T: Ring, U: Ring> Print for MultivariatePolynomial<V, T, U> {
+impl<V: Monomial + Print, T: Ring, U: Set> Print for MultivariatePolynomial<V, T, U> {
     fn print(&self, options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (j, (vars, coeff)) in self.terms.iter().enumerate() {
             let has_coeff = !self.set.is_one(coeff) || vars.is_empty();
@@ -620,7 +620,8 @@ impl<V: Monomial + Print, T: Ring, U: Ring> Print for MultivariatePolynomial<V, 
         }
         Ok(())
     }
-
+}
+impl<V: Monomial, T: Ring, U: Ring> PrettyPrint for MultivariatePolynomial<V, T, U> {
     fn pretty_print(&self, options: &PrintOptions) -> PrettyPrinter {
         let mut res = PrettyPrinter::empty();
         for (vars, coeff) in self.terms.iter() {
@@ -644,8 +645,8 @@ impl<V: Monomial + Print, T: Ring, U: Ring> Print for MultivariatePolynomial<V, 
     }
 }
 
-impl<V: Monomial + Print, T: Ring, U: Ring> Display for MultivariatePolynomial<V, T, U> {
+impl<V: Monomial + PrettyPrint, T: Ring, U: Ring> Display for MultivariatePolynomial<V, T, U> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Print::fmt(self, &PrintOptions::default(), f)
+        PrettyPrint::fmt(self, &PrintOptions::default(), f)
     }
 }

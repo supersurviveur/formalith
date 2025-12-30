@@ -4,8 +4,8 @@ use std::fmt::Display;
 
 use crate::{
     field::{Group, Ring, RingBound, Set},
-    printer::{PrettyPrinter, Print, PrintOptions},
-    term::Value,
+    printer::{PrettyPrint, PrettyPrinter, Print, PrintOptions},
+    term::{Normalize, Value},
 };
 
 use super::{Flags, Term};
@@ -118,7 +118,8 @@ impl<'a, T: Set> IntoIterator for &'a Mul<T> {
     }
 }
 
-impl<T: Group> Mul<T> {
+
+impl<T: Set> Print for Mul<T> {
     fn print(&self, options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Print the cefficient at the beginning of the product
         if self.has_coeff() {
@@ -140,31 +141,19 @@ impl<T: Group> Mul<T> {
         Ok(())
     }
 }
-
-impl<T: Group> Print for Mul<T> {
-    default fn print(
-        &self,
-        options: &PrintOptions,
-        f: &mut std::fmt::Formatter<'_>,
-    ) -> std::fmt::Result {
-        Self::print(self, options, f)
-    }
-
+impl<T: Set> PrettyPrint for Mul<T> {
     default fn pretty_print(&self, _options: &PrintOptions) -> crate::printer::PrettyPrinter {
         todo!()
     }
 }
 
-impl<T: RingBound> Print for Mul<T> {
-    fn print(&self, options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Self::print(self, options, f)
-    }
+impl<T: RingBound> PrettyPrint for Mul<T> {
     fn pretty_print(&self, options: &PrintOptions) -> crate::printer::PrettyPrinter {
         let mut den: Option<PrettyPrinter> = None;
         let mut num: Option<PrettyPrinter> = None;
         // Print the cefficient at the beginning of the product
         if self.has_coeff() {
-            num = Some(Print::pretty_print(
+            num = Some(PrettyPrint::pretty_print(
                 &Term::Value(Value::new(
                     self.coefficient.clone(),
                     self.set.get_coefficient_set(),
@@ -181,7 +170,7 @@ impl<T: RingBound> Print for Mul<T> {
                 }
                 _ => factor,
             };
-            let mut elem = Print::pretty_print(printed, options);
+            let mut elem = PrettyPrint::pretty_print(printed, options);
             if matches!(printed, Term::Add(_)) {
                 elem.paren();
             }
@@ -206,7 +195,7 @@ impl<T: RingBound> Print for Mul<T> {
         let mut num = if let Some(num) = num {
             num
         } else {
-            Print::pretty_print(&Term::one(self.set), options)
+            PrettyPrint::pretty_print(&Term::one(self.set), options)
         };
         if let Some(den) = den {
             num.vertical_concat("─", &den);
@@ -215,8 +204,8 @@ impl<T: RingBound> Print for Mul<T> {
     }
 }
 
-impl<T: Group> Display for Mul<T> {
+impl<T: Set> Display for Mul<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Print::fmt(self, &PrintOptions::default(), f)
+        PrettyPrint::fmt(self, &PrintOptions::default(), f)
     }
 }

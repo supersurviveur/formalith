@@ -5,9 +5,9 @@ use formalith::{
     parse,
     polynom::MultivariatePolynomial,
     symbol,
+    term::Expand,
 };
 use malachite::rational::Rational;
-use tracing_subscriber::filter::LevelFilter;
 
 pub fn main() {
     tracing_subscriber::fmt::init();
@@ -76,7 +76,6 @@ pub fn main() {
             .to_polynomial()
             .gcd(&parse!("x^2", R).to_polynomial())
     );
-    println!("euh: {:#?}", parse!("x^(2*n)", R));
     println!(
         "{}",
         parse!("x^(2*n)", R)

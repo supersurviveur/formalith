@@ -4,7 +4,7 @@ use std::fmt::{Debug, Display};
 
 use crate::{
     context::{Context, Symbol},
-    printer::{PrettyPrinter, Print, PrintOptions},
+    printer::{PrettyPrint, PrettyPrinter, Print, PrintOptions},
 };
 
 use super::{Flags, NORMALIZED};
@@ -14,7 +14,7 @@ use super::{Flags, NORMALIZED};
 pub struct SymbolTerm<T> {
     flags: u8,
     pub(crate) symbol: Symbol,
-    pub(crate) ring: T,
+    pub(crate) set: T,
 }
 
 impl<T> Flags for SymbolTerm<T> {
@@ -28,11 +28,11 @@ impl<T> Flags for SymbolTerm<T> {
 
 impl<T> SymbolTerm<T> {
     /// Create a new symbol expression
-    pub fn new(symbol: Symbol, ring: T) -> Self {
+    pub fn new(symbol: Symbol, set: T) -> Self {
         Self {
             flags: NORMALIZED,
             symbol,
-            ring,
+            set,
         }
     }
 }
@@ -40,13 +40,14 @@ impl<T: Debug> Print for SymbolTerm<T> {
     fn print(&self, _options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", Context::get_symbol_data(&self.symbol).name)
     }
-
+}
+impl<T: Debug> PrettyPrint for SymbolTerm<T> {
     fn pretty_print(&self, _options: &PrintOptions) -> crate::printer::PrettyPrinter {
         PrettyPrinter::from(Context::get_symbol_data(&self.symbol).name.clone())
     }
 }
 impl<T: Debug> Display for SymbolTerm<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Print::fmt(self, &PrintOptions::default(), f)
+        PrettyPrint::fmt(self, &PrintOptions::default(), f)
     }
 }

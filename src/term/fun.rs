@@ -9,8 +9,9 @@ use owo_colors::colors::Cyan;
 
 use crate::{
     context::{Context, Symbol},
-    field::{RingBound, Set},
-    printer::{PrettyPrinter, Print, PrintOptions},
+    field::Set,
+    printer::{PrettyPrint, PrettyPrinter, Print, PrintOptions},
+    term::{Expand, Normalize},
 };
 
 use super::{Flags, Term};
@@ -18,7 +19,7 @@ use super::{Flags, Term};
 /// To allow function from any set to the set `T`, a dynamic dispatch is used with this trait, implementing needed methods.
 ///
 /// See [Fun] for a structure implementing this trait.
-pub trait Function<T: Set>: Debug + DynClone + DynEq + DynHash + Flags + Print {
+pub trait Function<T: Set>: Debug + DynClone + DynEq + DynHash + Flags + PrettyPrint {
     /// Normalize arguments of the function.
     fn normalize(&self) -> Term<T>;
     /// Expand arguments of the function.
@@ -48,7 +49,7 @@ impl<T: Set> dyn Function<T> {
     }
 }
 
-impl<From: RingBound, T: RingBound> Function<T> for Fun<From, T> {
+impl<From: Set, T: Set> Function<T> for Fun<From, T> {
     fn normalize(&self) -> Term<T> {
         let mut new_args = vec![];
         for arg in &self.args {
@@ -105,7 +106,7 @@ impl<From: Set, T> Flags for Fun<From, T> {
     }
 }
 
-impl<From: RingBound, T: RingBound> Print for Fun<From, T> {
+impl<From: Set, T: Set> Print for Fun<From, T> {
     fn print(&self, options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Self::fg::<Cyan>(self.get_ident_as_str(), options, f)?;
         Self::group_delim("(", options, f)?;
@@ -117,7 +118,8 @@ impl<From: RingBound, T: RingBound> Print for Fun<From, T> {
         }
         Self::group_delim(")", options, f)
     }
-
+}
+impl<From: Set, T: Set> PrettyPrint for Fun<From, T> {
     fn pretty_print(&self, options: &PrintOptions) -> crate::printer::PrettyPrinter {
         let mut args = self.args.iter().map(|x| x.pretty_print(options));
         let mut res = args.next().unwrap();

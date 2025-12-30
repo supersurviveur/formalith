@@ -4,11 +4,11 @@ use std::cmp::Ordering;
 
 use super::{Add, Mul, Pow, Term, Value};
 use crate::{
-    field::{Group, RingBound},
-    term::{MergeTerm, flags::Flags},
+    field::{Group, Ring},
+    term::{MergeTerms, Normalize, flags::Flags},
 };
 
-impl<T: RingBound> std::ops::Add for &Term<T> {
+impl<T: Group> std::ops::Add for &Term<T> {
     type Output = Term<T>;
 
     fn add(self, rhs: Self) -> Self::Output {
@@ -108,19 +108,19 @@ impl<T: RingBound> std::ops::Add for &Term<T> {
     }
 }
 
-impl<T: RingBound> std::ops::AddAssign<&Self> for Term<T> {
+impl<T: Group> std::ops::AddAssign<&Self> for Term<T> {
     fn add_assign(&mut self, rhs: &Self) {
         *self = &*self + rhs;
     }
 }
 
-impl<T: RingBound> std::ops::AddAssign for Term<T> {
+impl<T: Group> std::ops::AddAssign for Term<T> {
     fn add_assign(&mut self, rhs: Self) {
         *self = &*self + &rhs;
     }
 }
 
-impl<T: RingBound> std::ops::Add<&Self> for Term<T> {
+impl<T: Group> std::ops::Add<&Self> for Term<T> {
     type Output = Self;
 
     fn add(self, rhs: &Self) -> Self::Output {
@@ -128,7 +128,7 @@ impl<T: RingBound> std::ops::Add<&Self> for Term<T> {
     }
 }
 
-impl<T: RingBound> std::ops::Add for Term<T> {
+impl<T: Group> std::ops::Add for Term<T> {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
@@ -136,7 +136,7 @@ impl<T: RingBound> std::ops::Add for Term<T> {
     }
 }
 
-impl<T: RingBound> std::ops::Mul for &Term<T> {
+impl<T: Ring> std::ops::Mul for &Term<T> {
     type Output = Term<T>;
 
     fn mul(self, rhs: Self) -> Self::Output {
@@ -152,19 +152,19 @@ impl<T: RingBound> std::ops::Mul for &Term<T> {
     }
 }
 
-impl<T: RingBound> std::ops::MulAssign<&Self> for Term<T> {
+impl<T: Ring> std::ops::MulAssign<&Self> for Term<T> {
     fn mul_assign(&mut self, rhs: &Self) {
         *self = &*self * rhs;
     }
 }
 
-impl<T: RingBound> std::ops::MulAssign for Term<T> {
+impl<T: Ring> std::ops::MulAssign for Term<T> {
     fn mul_assign(&mut self, rhs: Self) {
         *self = &*self * &rhs;
     }
 }
 
-impl<T: RingBound> std::ops::Mul<&Self> for Term<T> {
+impl<T: Ring> std::ops::Mul<&Self> for Term<T> {
     type Output = Self;
 
     fn mul(self, rhs: &Self) -> Self::Output {
@@ -172,7 +172,7 @@ impl<T: RingBound> std::ops::Mul<&Self> for Term<T> {
     }
 }
 
-impl<T: RingBound> std::ops::Mul for Term<T> {
+impl<T: Ring> std::ops::Mul for Term<T> {
     type Output = Self;
 
     fn mul(self, rhs: Self) -> Self::Output {
@@ -180,7 +180,7 @@ impl<T: RingBound> std::ops::Mul for Term<T> {
     }
 }
 
-impl<T: RingBound> std::ops::Div for &Term<T> {
+impl<T: Ring> std::ops::Div for &Term<T> {
     type Output = Term<T>;
 
     fn div(self, rhs: Self) -> Self::Output {
@@ -195,13 +195,13 @@ impl<T: RingBound> std::ops::Div for &Term<T> {
     }
 }
 
-impl<T: RingBound> std::ops::DivAssign for Term<T> {
+impl<T: Ring> std::ops::DivAssign for Term<T> {
     fn div_assign(&mut self, rhs: Self) {
         *self = &*self / &rhs;
     }
 }
 
-impl<T: RingBound> std::ops::Div<&Self> for Term<T> {
+impl<T: Ring> std::ops::Div<&Self> for Term<T> {
     type Output = Self;
 
     fn div(self, rhs: &Self) -> Self::Output {
@@ -209,7 +209,7 @@ impl<T: RingBound> std::ops::Div<&Self> for Term<T> {
     }
 }
 
-impl<T: RingBound> std::ops::Div for Term<T> {
+impl<T: Ring> std::ops::Div for Term<T> {
     type Output = Self;
 
     fn div(self, rhs: Self) -> Self::Output {
@@ -217,7 +217,7 @@ impl<T: RingBound> std::ops::Div for Term<T> {
     }
 }
 
-impl<T: RingBound> std::ops::Neg for Term<T> {
+impl<T: Group> std::ops::Neg for Term<T> {
     type Output = Self;
 
     fn neg(self) -> Self::Output {
@@ -225,7 +225,7 @@ impl<T: RingBound> std::ops::Neg for Term<T> {
     }
 }
 
-impl<T: RingBound> std::ops::Neg for &Term<T> {
+impl<T: Group> std::ops::Neg for &Term<T> {
     type Output = Term<T>;
 
     fn neg(self) -> Self::Output {
@@ -243,7 +243,7 @@ impl<T: RingBound> std::ops::Neg for &Term<T> {
                 .normalize();
             }
             Term::Symbol(ref symbol) => {
-                let ring = symbol.ring;
+                let ring = symbol.set;
                 new = Term::Mul(Mul::new(
                     ring.get_coefficient_set().nth(-1),
                     vec![new],
@@ -274,7 +274,7 @@ impl<T: RingBound> std::ops::Neg for &Term<T> {
     }
 }
 
-impl<T: RingBound> std::ops::Sub for &Term<T> {
+impl<T: Group> std::ops::Sub for &Term<T> {
     type Output = Term<T>;
 
     fn sub(self, rhs: Self) -> Self::Output {
@@ -284,13 +284,13 @@ impl<T: RingBound> std::ops::Sub for &Term<T> {
     }
 }
 
-impl<T: RingBound> std::ops::SubAssign for Term<T> {
+impl<T: Group> std::ops::SubAssign for Term<T> {
     fn sub_assign(&mut self, rhs: Self) {
         *self = &*self - &rhs;
     }
 }
 
-impl<T: RingBound> std::ops::Sub<&Self> for Term<T> {
+impl<T: Group> std::ops::Sub<&Self> for Term<T> {
     type Output = Self;
 
     fn sub(self, rhs: &Self) -> Self::Output {
@@ -298,7 +298,7 @@ impl<T: RingBound> std::ops::Sub<&Self> for Term<T> {
     }
 }
 
-impl<T: RingBound> std::ops::Sub for Term<T> {
+impl<T: Group> std::ops::Sub for Term<T> {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
@@ -306,9 +306,9 @@ impl<T: RingBound> std::ops::Sub for Term<T> {
     }
 }
 
-impl<T: RingBound> Term<T> {
+impl<T: Ring> Term<T> {
     /// Compute `self^exposant`
-    pub fn pow(&self, exposant: &Term<T::ExposantSet>) -> Term<T> {
+    pub fn pow(&self, exposant: &Term<T::ExponantSet>) -> Term<T> {
         debug_assert!(!self.needs_normalization());
         debug_assert!(!exposant.needs_normalization());
         let res = Term::Pow(Pow::new(self.clone(), exposant.clone(), self.get_set()));

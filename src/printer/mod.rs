@@ -6,9 +6,8 @@ use owo_colors::{
     Color, OwoColorize,
     colors::{BrightBlack, Yellow},
 };
-use phf::phf_map;
 
-use crate::{field::Group, term::Term};
+use crate::{field::Set, term::Term};
 
 /// Rendering options are stored here. It can be created from some presets or completly custom.
 #[derive(Debug)]
@@ -56,9 +55,9 @@ impl<'a, T> Printer<'a, T> {
     }
 }
 
-impl<T: Print> Display for Printer<'_, T> {
+impl<T: PrettyPrint> Display for Printer<'_, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Print::fmt(self.content, &self.options, f)
+        PrettyPrint::fmt(self.content, &self.options, f)
     }
 }
 
@@ -78,19 +77,8 @@ pub trait Print: Debug {
     {
         self.with_options(PrintOptions::stdout())
     }
-    /// Format `self` using given options, selecting or not pretty printing.
-    fn fmt(&self, options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if options.pretty_print {
-            write!(f, "{}", self.pretty_print(options))
-        } else {
-            self.print(options, f)
-        }
-    }
     /// Format `self` using given options.
     fn print(&self, options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result;
-    /// Format `self` using given options, with pretty printing.
-    #[must_use]
-    fn pretty_print(&self, options: &PrintOptions) -> PrettyPrinter;
 
     /// Apply delimiter color depending on options.
     #[inline(always)]
@@ -107,7 +95,7 @@ pub trait Print: Debug {
 
     /// Add paren to the expr if needed.
     #[inline(always)]
-    fn group<T: Group>(
+    fn group<T: Set>(
         elem: &Term<T>,
         options: &PrintOptions,
         f: &mut std::fmt::Formatter<'_>,
@@ -178,6 +166,20 @@ pub trait Print: Debug {
         Ok(())
     }
 }
+/// Elements and expressions which can be pretty printed using options.
+pub trait PrettyPrint: Print {
+    /// Format `self` using given options, selecting or not pretty printing.
+    fn fmt(&self, options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if options.pretty_print {
+            write!(f, "{}", self.pretty_print(options))
+        } else {
+            self.print(options, f)
+        }
+    }
+    /// Format `self` using given options, with pretty printing.
+    #[must_use]
+    fn pretty_print(&self, options: &PrintOptions) -> PrettyPrinter;
+}
 
 /// Utility struct implementing various ascii art printing methods.
 #[derive(Debug, Clone)]
@@ -199,14 +201,16 @@ impl From<String> for PrettyPrinter {
     }
 }
 
-/// Hashmap which contains unicode drawing symbols associated to characters.
-static DRAWINGS_CHARS: phf::Map<char, (char, char, char)> = phf_map! {
-    '(' => ('⎛', '⎜', '⎝'),
-    ')' => ('⎞', '⎟', '⎠'),
-    '[' => ('⎡', '⎢', '⎣'),
-    ']' => ('⎤', '⎥', '⎦'),
-    '|' => ('│', '│', '│')
-};
+const fn get_drawings_chars(sym: char) -> Option<(char, char, char)> {
+    match sym {
+        '(' => Some(('⎛', '⎜', '⎝')),
+        ')' => Some(('⎞', '⎟', '⎠')),
+        '[' => Some(('⎡', '⎢', '⎣')),
+        ']' => Some(('⎤', '⎥', '⎦')),
+        '|' => Some(('│', '│', '│')),
+        _ => None,
+    }
+}
 
 impl PrettyPrinter {
     /// Create a new blank pretty printer.
@@ -375,13 +379,13 @@ impl PrettyPrinter {
     }
     /// Add `sym` at the left of self, converting it to unicode drawings chars.
     pub fn left(&mut self, sym: char) {
-        let or = &(sym, sym, sym);
+        let or = (sym, sym, sym);
         let height = self.height();
         let drawings = if height == 1 {
             // If height is 1, use directly sym, not a drawing variant
             or
         } else {
-            DRAWINGS_CHARS.get(&sym).unwrap_or(or)
+            get_drawings_chars(sym).unwrap_or(or)
         };
         for i in 0..height {
             self.lines[i].insert(
@@ -399,13 +403,13 @@ impl PrettyPrinter {
     }
     /// Add `sym` at the left of self, converting it to unicode drawings chars.
     pub fn right(&mut self, sym: char) {
-        let or = &(sym, sym, sym);
+        let or = (sym, sym, sym);
         let height = self.height();
         let drawings = if height == 1 {
             // If height is 1, use directly sym, not a drawing variant
             or
         } else {
-            DRAWINGS_CHARS.get(&sym).unwrap_or(or)
+            get_drawings_chars(sym).unwrap_or(or)
         };
         for i in 0..height {
             self.lines[i].push(if i == 0 {

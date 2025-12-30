@@ -15,3 +15,4 @@ pub mod parser;
 pub mod polynom;
 pub mod printer;
 pub mod term;
+pub mod traits;

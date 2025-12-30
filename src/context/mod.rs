@@ -8,7 +8,7 @@ use std::{
 
 use append_only_vec::AppendOnlyVec;
 
-use crate::printer::{PrettyPrinter, Print};
+use crate::printer::{PrettyPrint, PrettyPrinter, Print};
 
 /// Store all symbols' data created
 static SYMBOLS: AppendOnlyVec<SymbolData> = AppendOnlyVec::new();
@@ -52,7 +52,8 @@ impl Print for Symbol {
     ) -> std::fmt::Result {
         f.write_str(&Context::get_symbol_data(self).name)
     }
-
+}
+impl PrettyPrint for Symbol {
     fn pretty_print(
         &self,
         _options: &crate::printer::PrintOptions,

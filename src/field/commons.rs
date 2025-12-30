@@ -23,11 +23,12 @@ use std::{
 use crate::{
     combinatorics,
     context::{Context, Symbol},
-    field::{RingParseExpression, Set},
+    field::{Set, SetParseExpression},
     matrix::{Matrix, MatrixResult},
     parser::{Parser, ParserError, ParserTraitBounded, lexer::TokenKind},
-    printer::{PrettyPrinter, Print},
-    term::{self, Fun, Mul, Term, TermField, Value},
+    printer::{PrettyPrint, PrettyPrinter},
+    term::{self, Expand, Fun, Mul, Normalize, Term, TermSet, Value},
+    traits::optional_default::OptionalDefault,
 };
 
 use super::{Derivable, Field, Group, Ring, RingBound, TryElementFrom};
@@ -43,8 +44,8 @@ impl<T: Clone> Copy for Z<T> {}
 impl Set for Z<Integer> {
     type Element = Integer;
 
-    type ExposantSet = Z<Integer>; // TODO change type
-    fn get_exposant_set(&self) -> Self::ExposantSet {
+    type ExponantSet = Z<Integer>; // TODO change type
+    fn get_exposant_set(&self) -> Self::ExponantSet {
         *self
     }
     fn get_coefficient_set(&self) -> Self::ProductCoefficientSet {
@@ -64,6 +65,10 @@ impl Set for Z<Integer> {
         _: &crate::printer::PrintOptions,
     ) -> crate::printer::PrettyPrinter {
         PrettyPrinter::from(format!("{elem}"))
+    }
+    fn parse_literal(&self, value: &str) -> Result<Self::Element, String> {
+        Integer::from_sci_string(value)
+            .ok_or(format!("Failed to parse \"{value}\" to malachite::Integer",))
     }
 }
 
@@ -87,11 +92,6 @@ impl Group for Z<Integer> {
     fn partial_cmp(&self, a: &Self::Element, b: &Self::Element) -> Option<Ordering> {
         a.partial_cmp(b)
     }
-
-    fn parse_litteral(&self, value: &str) -> Result<Self::Element, String> {
-        Integer::from_sci_string(value)
-            .ok_or(format!("Failed to parse \"{value}\" to malachite::Integer",))
-    }
 }
 
 impl Ring for Z<Integer> {
@@ -113,7 +113,7 @@ impl Ring for Z<Integer> {
         }
     }
 }
-impl<N> RingParseExpression<N> for Z<Integer> {}
+impl<N> SetParseExpression<N> for Z<Integer> {}
 
 /// The integer ring, using [malachite::Integer] as constant to get arbitrary precision integers.
 pub const Z: Z<Integer> = Z {
@@ -130,9 +130,9 @@ impl<T: Clone> Copy for R<T> {}
 
 impl Set for R<malachite::rational::Rational> {
     type Element = Rational;
-    type ExposantSet = R<Rational>;
+    type ExponantSet = R<Rational>;
     type ProductCoefficientSet = R<Rational>;
-    fn get_exposant_set(&self) -> Self::ExposantSet {
+    fn get_exposant_set(&self) -> Self::ExponantSet {
         *self
     }
     fn get_coefficient_set(&self) -> Self::ProductCoefficientSet {
@@ -165,11 +165,16 @@ impl Set for R<malachite::rational::Rational> {
             num
         }
     }
+    fn parse_literal(&self, value: &str) -> Result<Self::Element, String> {
+        Rational::from_sci_string(value).ok_or(format!(
+            "Failed to parse \"{value}\" to malachite::Rational",
+        ))
+    }
 }
 
-impl Group for R<malachite::rational::Rational> {
+impl Group for R<Rational> {
     fn zero(&self) -> Self::Element {
-        malachite::rational::Rational::ZERO
+        Rational::ZERO
     }
 
     fn nth(&self, nth: i64) -> <Self::ProductCoefficientSet as Set>::Element {
@@ -186,12 +191,6 @@ impl Group for R<malachite::rational::Rational> {
 
     fn partial_cmp(&self, a: &Self::Element, b: &Self::Element) -> Option<Ordering> {
         a.partial_cmp(b)
-    }
-
-    fn parse_litteral(&self, value: &str) -> Result<Self::Element, String> {
-        Rational::from_sci_string(value).ok_or(format!(
-            "Failed to parse \"{value}\" to malachite::Rational",
-        ))
     }
 }
 
@@ -373,7 +372,7 @@ impl Ring for R<Rational> {
     }
 }
 
-impl<N> RingParseExpression<N> for R<Rational> {}
+impl<N> SetParseExpression<N> for R<Rational> {}
 
 impl Field for R<Rational> {}
 
@@ -397,7 +396,7 @@ pub enum VectorSpaceElement<T: Set, Vector> {
     Vector(Vector),
 }
 
-impl<T: RingBound> VectorSpaceElement<TermField<T>, Matrix<TermField<T>>> {
+impl<T: Ring> VectorSpaceElement<TermSet<T>, Matrix<TermSet<T>>> {
     /// Compute the determinant of self in set `T`.
     pub fn det(&self, _set: T) -> MatrixResult<Term<T>> {
         match self {
@@ -407,10 +406,7 @@ impl<T: RingBound> VectorSpaceElement<TermField<T>, Matrix<TermField<T>>> {
     }
 }
 
-impl<T: Set, Vector: PartialEq> PartialOrd for VectorSpaceElement<T, Vector>
-where
-    T::Element: PartialOrd,
-{
+impl<T: Set, Vector: PartialEq> PartialOrd for VectorSpaceElement<T, Vector> {
     #[inline]
     fn partial_cmp(&self, other: &VectorSpaceElement<T, Vector>) -> Option<Ordering> {
         match (self, other) {
@@ -444,12 +440,41 @@ impl<T> M<T> {
     }
 }
 
+impl<T: Set> Set for M<T> {
+    default type Element = VectorSpaceElement<TermSet<T>, Matrix<TermSet<T>>>;
+    default type ExponantSet = Z<Integer>;
+    default type ProductCoefficientSet = Z<Integer>;
+    default fn get_exposant_set(&self) -> Self::ExponantSet {
+        Self::ExponantSet::optional_default().unwrap()
+    }
+    default fn get_coefficient_set(&self) -> Self::ProductCoefficientSet {
+        Self::ProductCoefficientSet::optional_default().unwrap()
+    }
+    default fn print(
+        &self,
+        elem: &Self::Element,
+        _: &crate::printer::PrintOptions,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        write!(f, "{}", elem)
+    }
+    default fn pretty_print(
+        &self,
+        _elem: &Self::Element,
+        _options: &crate::printer::PrintOptions,
+    ) -> crate::printer::PrettyPrinter {
+        todo!()
+    }
+    default fn parse_literal(&self, _value: &str) -> Result<Self::Element, String> {
+        todo!()
+    }
+}
 impl<T: RingBound> Set for M<T> {
-    type Element = VectorSpaceElement<TermField<T>, Matrix<TermField<T>>>;
-    type ExposantSet = M<T::ExposantSet>;
+    type Element = VectorSpaceElement<TermSet<T>, Matrix<TermSet<T>>>;
+    type ExponantSet = M<T::ExponantSet>;
     type ProductCoefficientSet = Self;
-    fn get_exposant_set(&self) -> Self::ExposantSet {
-        self.scalar_sub_set.get_exposant_set().get_matrix_group()
+    fn get_exposant_set(&self) -> Self::ExponantSet {
+        self.scalar_sub_set.get_exposant_set().get_matrix_set()
     }
     fn get_coefficient_set(&self) -> Self::ProductCoefficientSet {
         *self
@@ -470,26 +495,31 @@ impl<T: RingBound> Set for M<T> {
         match elem {
             VectorSpaceElement::Scalar(scalar) => self
                 .scalar_sub_set
-                .get_term_field()
+                .get_term_set()
                 .pretty_print(scalar, options),
-            VectorSpaceElement::Vector(matrix) => Print::pretty_print(matrix, options),
+            VectorSpaceElement::Vector(matrix) => PrettyPrint::pretty_print(matrix, options),
         }
+    }
+    fn parse_literal(&self, value: &str) -> Result<Self::Element, String> {
+        Ok(VectorSpaceElement::Scalar(
+            self.scalar_sub_set.get_term_set().parse_literal(value)?,
+        ))
     }
 }
 
 impl<T: RingBound> Group for M<T> {
     fn zero(&self) -> Self::Element {
-        VectorSpaceElement::Scalar(self.scalar_sub_set.get_term_field().zero())
+        VectorSpaceElement::Scalar(self.scalar_sub_set.get_term_set().zero())
     }
 
     fn nth(&self, nth: i64) -> <Self::ProductCoefficientSet as Set>::Element {
-        VectorSpaceElement::Scalar(self.scalar_sub_set.get_term_field().nth(nth))
+        VectorSpaceElement::Scalar(self.scalar_sub_set.get_term_set().nth(nth))
     }
 
     fn add(&self, a: &Self::Element, b: &Self::Element) -> Self::Element {
         match (a, b) {
             (VectorSpaceElement::Scalar(a), VectorSpaceElement::Scalar(b)) => {
-                VectorSpaceElement::Scalar(self.scalar_sub_set.get_term_field().add(a, b))
+                VectorSpaceElement::Scalar(self.scalar_sub_set.get_term_set().add(a, b))
             }
             (VectorSpaceElement::Vector(a), VectorSpaceElement::Vector(b)) => {
                 VectorSpaceElement::Vector(a + b)
@@ -501,7 +531,7 @@ impl<T: RingBound> Group for M<T> {
     fn neg(&self, a: &Self::Element) -> Self::Element {
         match a {
             VectorSpaceElement::Scalar(a) => {
-                VectorSpaceElement::Scalar(self.scalar_sub_set.get_term_field().neg(a))
+                VectorSpaceElement::Scalar(self.scalar_sub_set.get_term_set().neg(a))
             }
             VectorSpaceElement::Vector(a) => VectorSpaceElement::Vector(-a),
         }
@@ -510,20 +540,15 @@ impl<T: RingBound> Group for M<T> {
     fn partial_cmp(&self, a: &Self::Element, b: &Self::Element) -> Option<Ordering> {
         match (a, b) {
             (VectorSpaceElement::Scalar(a), VectorSpaceElement::Scalar(b)) => {
-                self.scalar_sub_set.get_term_field().partial_cmp(a, b)
+                self.scalar_sub_set.get_term_set().partial_cmp(a, b)
             }
             _ => None,
         }
     }
-    fn parse_litteral(&self, value: &str) -> Result<Self::Element, String> {
-        Ok(VectorSpaceElement::Scalar(
-            self.scalar_sub_set.get_term_field().parse_litteral(value)?,
-        ))
-    }
 }
 impl<T: RingBound> Ring for M<T> {
     fn one(&self) -> Self::Element {
-        VectorSpaceElement::Scalar(self.scalar_sub_set.get_term_field().one())
+        VectorSpaceElement::Scalar(self.scalar_sub_set.get_term_set().one())
     }
     fn mul(&self, _a: &Self::Element, _b: &Self::Element) -> Self::Element {
         todo!()
@@ -533,7 +558,7 @@ impl<T: RingBound> Ring for M<T> {
         match a {
             VectorSpaceElement::Scalar(scalar) => self
                 .scalar_sub_set
-                .get_term_field()
+                .get_term_set()
                 .try_inv(scalar)
                 .map(VectorSpaceElement::Scalar),
             VectorSpaceElement::Vector(matrix) => matrix.inv().ok().map(VectorSpaceElement::Vector),
@@ -667,7 +692,7 @@ impl<T: RingBound> Ring for M<T> {
     }
 }
 
-impl<T: RingBound, N> RingParseExpression<N> for M<T>
+impl<T: RingBound, N> SetParseExpression<N> for M<T>
 where
     for<'a> Parser<'a>: ParserTraitBounded<T, N>,
 {
@@ -719,7 +744,7 @@ where
                     VectorSpaceElement::Vector(Matrix::new(
                         (lines.len() / size.unwrap(), size.unwrap()),
                         lines,
-                        self.scalar_sub_set.get_term_field(),
+                        self.scalar_sub_set.get_term_set(),
                     )),
                     *self,
                 ))))
@@ -741,7 +766,7 @@ impl fmt::Display for TryCastError {
     }
 }
 
-impl<T: RingBound> TryElementFrom<M<T>> for TermField<T> {
+impl<T: RingBound> TryElementFrom<M<T>> for TermSet<T> {
     fn try_from_element(value: <M<T> as Set>::Element) -> Result<Self::Element, TryCastError> {
         match value {
             VectorSpaceElement::Scalar(scalar) => Ok(scalar),
@@ -750,9 +775,9 @@ impl<T: RingBound> TryElementFrom<M<T>> for TermField<T> {
     }
 }
 
-impl<T: RingBound> TryElementFrom<TermField<T>> for M<T> {
+impl<T: RingBound> TryElementFrom<TermSet<T>> for M<T> {
     fn try_from_element(
-        value: <TermField<T> as Set>::Element,
+        value: <TermSet<T> as Set>::Element,
     ) -> Result<Self::Element, TryCastError> {
         Ok(VectorSpaceElement::Scalar(value))
     }
@@ -767,12 +792,12 @@ impl From<usize> for Term<R<Rational>> {
     }
 }
 
-impl<T> TryElementFrom<TermField<R<T>>> for R<T>
+impl<T> TryElementFrom<TermSet<R<T>>> for R<T>
 where
     Self: RingBound,
 {
     fn try_from_element(
-        value: <TermField<R<T>> as Set>::Element,
+        value: <TermSet<R<T>> as Set>::Element,
     ) -> Result<Self::Element, TryCastError> {
         match value {
             Term::Value(value) => Ok(value.get_value()),

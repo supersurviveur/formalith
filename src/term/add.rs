@@ -4,7 +4,7 @@ use std::fmt::Display;
 
 use crate::{
     field::{Group, Set},
-    printer::{PrettyPrinter, Print, PrintOptions},
+    printer::{PrettyPrint, PrettyPrinter, Print, PrintOptions},
 };
 
 use super::{Flags, Term, Value};
@@ -82,6 +82,15 @@ impl<'a, T: Set> IntoIterator for &'a Add<T> {
     }
 }
 
+impl<T: Set> Print for Add<T> {
+    default fn print(
+        &self,
+        _options: &crate::printer::PrintOptions,
+        _f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        todo!()
+    }
+}
 impl<T: Group> Print for Add<T> {
     fn print(
         &self,
@@ -119,13 +128,20 @@ impl<T: Group> Print for Add<T> {
         }
         Ok(())
     }
-
+}
+impl<T: Set> PrettyPrint for Add<T> {
+    default fn pretty_print(&self, _options: &PrintOptions) -> crate::printer::PrettyPrinter {
+        todo!()
+    }
+}
+impl<T: Group> PrettyPrint for Add<T> {
     fn pretty_print(&self, options: &PrintOptions) -> crate::printer::PrettyPrinter {
         let mut res: Option<PrettyPrinter> = None;
         for term in self.terms.iter() {
             match term {
                 Term::Value(Value { value, set, .. }) if term.is_strictly_negative() => {
-                    let elem = Print::pretty_print(&Value::new(set.neg(value), *set), options);
+                    let elem =
+                        PrettyPrint::pretty_print(&Value::new(set.neg(value), *set), options);
                     if let Some(res) = &mut res {
                         res.concat("-", true, &elem);
                     } else {
@@ -142,11 +158,11 @@ impl<T: Group> Print for Add<T> {
                     let mut mul = mul.clone();
                     let coeff = &mut mul.coefficient;
                     mul.set.get_coefficient_set().neg_assign(coeff);
-                    let elem = Print::pretty_print(&mul, options);
+                    let elem = PrettyPrint::pretty_print(&mul, options);
                     res.as_mut().unwrap().concat("-", true, &elem);
                 }
                 _ => {
-                    let elem = Print::pretty_print(term, options);
+                    let elem = PrettyPrint::pretty_print(term, options);
                     if let Some(res) = &mut res {
                         res.concat("+", true, &elem);
                     } else {
@@ -159,8 +175,8 @@ impl<T: Group> Print for Add<T> {
     }
 }
 
-impl<T: Group> Display for Add<T> {
+impl<T: Set> Display for Add<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Print::fmt(self, &PrintOptions::default(), f)
+        PrettyPrint::fmt(self, &PrintOptions::default(), f)
     }
 }
