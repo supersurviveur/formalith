@@ -17,3 +17,7 @@ tracing-subscriber = "0.3"
 
 # [profile.release]
 # debug = 1
+
+[features]
+default = []
+rust-analyzer = []

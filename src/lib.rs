@@ -5,7 +5,7 @@
 #![warn(rustdoc::broken_intra_doc_links)]
 #![warn(missing_docs)]
 #![allow(incomplete_features)]
-#![feature(specialization, associated_type_defaults)]
+#![feature(specialization, associated_type_defaults, iter_order_by)]
 
 pub mod combinatorics;
 pub mod context;

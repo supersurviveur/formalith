@@ -8,7 +8,9 @@ use std::iter::Peekable;
 use std::ops::{Range, Sub};
 
 use crate::context::{Context, Symbol};
-use crate::field::{Group, M, Ring, RingBound, Set, SetParseExpression, SetParseExpressionBound};
+use crate::field::{
+    Group, M, Ring, RingBound, Set, SetBound, SetParseExpression, SetParseExpressionBound,
+};
 use crate::term::{Fun, Mul, Normalize, SymbolTerm, Term, Value};
 
 use lexer::{Lexer, Token, TokenKind};
@@ -148,7 +150,7 @@ impl Parser<'_> {
         }
     }
     /// Parse the parser's string, returning the parsed mathematical expression.
-    pub fn parse<E: RingBound + SetParseExpressionBound>(
+    pub fn parse<E: RingBound + SetParseExpressionBound + SetBound>(
         &mut self,
         set: E,
     ) -> Result<Term<E>, ParserError> {
@@ -324,7 +326,7 @@ where
                 ParserTraitBounded::<E::ExponantSet, Diff<N, U1>>::parse_expression_bounded(
                     self,
                     op.get_priority(),
-                    set.get_exposant_set(),
+                    set.get_exponant_set(),
                 )?
             {
                 return Ok((current.pow(&right), true));

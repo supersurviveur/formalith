@@ -82,96 +82,145 @@ impl<'a, T: Set> IntoIterator for &'a Add<T> {
     }
 }
 
-impl<T: Set> Print for Add<T> {
-    default fn print(
+impl<T: Set> Add<T> {
+    fn print_default<
+        F: FnMut(&Term<T>, &mut std::fmt::Formatter<'_>) -> Result<bool, std::fmt::Error>,
+    >(
         &self,
-        _options: &crate::printer::PrintOptions,
-        _f: &mut std::fmt::Formatter<'_>,
-    ) -> std::fmt::Result {
-        todo!()
-    }
-}
-impl<T: Group> Print for Add<T> {
-    fn print(
-        &self,
+        mut special_cases: F,
         options: &crate::printer::PrintOptions,
         f: &mut std::fmt::Formatter<'_>,
     ) -> std::fmt::Result {
         for (i, term) in self.terms.iter().enumerate() {
-            match term {
-                Term::Value(Value { value, set, .. }) if term.is_strictly_negative() => {
-                    if i != 0 {
+            if !special_cases(term, f)? {
+                match term {
+                    Term::Mul(mul)
+                        if mul
+                            .set
+                            .get_coefficient_set()
+                            .is_strictly_negative(&mul.get_coeff())
+                            && i != 0 =>
+                    {
+                        let mut mul = mul.clone();
+                        let coeff = &mut mul.coefficient;
+                        mul.set.get_coefficient_set().neg_assign(coeff);
                         Self::operator("-", options, f)?;
+                        Print::print(&mul, options, f)?;
                     }
-                    Print::print(&Value::new(set.neg(value), *set), options, f)?;
-                }
-                Term::Mul(mul)
-                    if mul
-                        .set
-                        .get_coefficient_set()
-                        .is_strictly_negative(&mul.get_coeff())
-                        && i != 0 =>
-                {
-                    let mut mul = mul.clone();
-                    let coeff = &mut mul.coefficient;
-                    mul.set.get_coefficient_set().neg_assign(coeff);
-                    Self::operator("-", options, f)?;
-                    Print::print(&mul, options, f)?;
-                }
-                _ => {
-                    if i != 0 {
-                        Self::operator("+", options, f)?;
+                    _ => {
+                        if i != 0 {
+                            Self::operator("+", options, f)?;
+                        }
+                        Print::print(term, options, f)?;
                     }
-                    Print::print(term, options, f)?;
                 }
             }
         }
         Ok(())
     }
 }
-impl<T: Set> PrettyPrint for Add<T> {
-    default fn pretty_print(&self, _options: &PrintOptions) -> crate::printer::PrettyPrinter {
-        todo!()
+
+impl<T: Set> Print for Add<T> {
+    default fn print(
+        &self,
+        options: &crate::printer::PrintOptions,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        self.print_default(|_, _| Ok(false), options, f)
     }
 }
-impl<T: Group> PrettyPrint for Add<T> {
-    fn pretty_print(&self, options: &PrintOptions) -> crate::printer::PrettyPrinter {
+
+impl<T: Group> Print for Add<T> {
+    fn print(
+        &self,
+        options: &crate::printer::PrintOptions,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        self.print_default(
+            |term, f| {
+                Ok(
+                    if let Term::Value(Value { value, set, .. }) = term
+                        && term.is_strictly_negative()
+                    {
+                        Self::operator("-", options, f)?;
+                        Print::print(&Value::new(set.neg(value), *set), options, f)?;
+                        true
+                    } else {
+                        false
+                    },
+                )
+            },
+            options,
+            f,
+        )
+    }
+}
+
+impl<T: Set> Add<T> {
+    fn pretty_print_default<F: FnMut(&Term<T>, &mut Option<PrettyPrinter>) -> bool>(
+        &self,
+        mut special_cases: F,
+        options: &PrintOptions,
+    ) -> crate::printer::PrettyPrinter {
         let mut res: Option<PrettyPrinter> = None;
         for term in self.terms.iter() {
-            match term {
-                Term::Value(Value { value, set, .. }) if term.is_strictly_negative() => {
-                    let elem =
-                        PrettyPrint::pretty_print(&Value::new(set.neg(value), *set), options);
-                    if let Some(res) = &mut res {
-                        res.concat("-", true, &elem);
-                    } else {
-                        res = Some(elem);
+            if !special_cases(term, &mut res) {
+                match term {
+                    Term::Mul(mul)
+                        if mul
+                            .set
+                            .get_coefficient_set()
+                            .is_strictly_negative(&mul.get_coeff())
+                            && res.is_some() =>
+                    {
+                        let mut mul = mul.clone();
+                        let coeff = &mut mul.coefficient;
+                        mul.set.get_coefficient_set().neg_assign(coeff);
+                        let elem = PrettyPrint::pretty_print(&mul, options);
+                        res.as_mut().unwrap().concat("-", true, &elem);
                     }
-                }
-                Term::Mul(mul)
-                    if mul
-                        .set
-                        .get_coefficient_set()
-                        .is_strictly_negative(&mul.get_coeff())
-                        && res.is_some() =>
-                {
-                    let mut mul = mul.clone();
-                    let coeff = &mut mul.coefficient;
-                    mul.set.get_coefficient_set().neg_assign(coeff);
-                    let elem = PrettyPrint::pretty_print(&mul, options);
-                    res.as_mut().unwrap().concat("-", true, &elem);
-                }
-                _ => {
-                    let elem = PrettyPrint::pretty_print(term, options);
-                    if let Some(res) = &mut res {
-                        res.concat("+", true, &elem);
-                    } else {
-                        res = Some(elem);
+                    _ => {
+                        let elem = PrettyPrint::pretty_print(term, options);
+                        if let Some(res) = &mut res {
+                            res.concat("+", true, &elem);
+                        } else {
+                            res = Some(elem);
+                        }
                     }
                 }
             }
         }
         res.unwrap()
+    }
+}
+
+impl<T: Set> PrettyPrint for Add<T> {
+    default fn pretty_print(&self, options: &PrintOptions) -> crate::printer::PrettyPrinter {
+        self.pretty_print_default(|_, _| false, options)
+    }
+}
+
+impl<T: Group> PrettyPrint for Add<T> {
+    fn pretty_print(&self, options: &PrintOptions) -> crate::printer::PrettyPrinter {
+        self.pretty_print_default(
+            |term, res| {
+                if let Term::Value(Value { value, set, .. }) = term
+                    && term.is_strictly_negative()
+                {
+                    let elem =
+                        PrettyPrint::pretty_print(&Value::new(set.neg(value), *set), options);
+                    if let Some(res) = res {
+                        res.concat("-", true, &elem);
+                    } else {
+                        *res = Some(elem);
+                    }
+                    true
+                } else {
+                    false
+                }
+            },
+            options,
+        )
     }
 }
 

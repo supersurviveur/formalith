@@ -188,8 +188,8 @@ impl<T: Ring> std::ops::Div for &Term<T> {
         debug_assert!(!rhs.needs_normalization());
         self * &rhs
             .pow(&Term::Value(Value::new(
-                self.get_set().get_exposant_set().nth(-1),
-                self.get_set().get_exposant_set(),
+                self.get_set().get_exponant_set().nth(-1),
+                self.get_set().get_exponant_set(),
             )))
             .normalize()
     }
@@ -307,11 +307,11 @@ impl<T: Group> std::ops::Sub for Term<T> {
 }
 
 impl<T: Ring> Term<T> {
-    /// Compute `self^exposant`
-    pub fn pow(&self, exposant: &Term<T::ExponantSet>) -> Term<T> {
+    /// Compute `self^exponant`
+    pub fn pow(&self, exponant: &Term<T::ExponantSet>) -> Term<T> {
         debug_assert!(!self.needs_normalization());
-        debug_assert!(!exposant.needs_normalization());
-        let res = Term::Pow(Pow::new(self.clone(), exposant.clone(), self.get_set()));
+        debug_assert!(!exponant.needs_normalization());
+        let res = Term::Pow(Pow::new(self.clone(), exponant.clone(), self.get_set()));
         res.normalize()
     }
 }

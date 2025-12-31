@@ -16,7 +16,7 @@ pub struct Pow<T: Set, E: Set = <T as Set>::ExponantSet> {
     flags: u8,
     pub(crate) base: Box<Term<T>>,
     /// `ManuallyDrop` is used to avoid drop-checking which fails for infinite type `T::ExponantSet::ExponantSet::...`
-    pub(crate) exposant: ManuallyDrop<Box<Term<E>>>,
+    pub(crate) exponant: ManuallyDrop<Box<Term<E>>>,
     pub(crate) set: T,
 }
 
@@ -33,13 +33,13 @@ impl<T: Set> Pow<T> {
     /// Create a new pow expression
     pub fn new<E: Into<Box<Term<T>>>, F: Into<Box<Term<T::ExponantSet>>>>(
         base: E,
-        exposant: F,
+        exponant: F,
         set: T,
     ) -> Self {
         Self {
             flags: 0,
             base: base.into(),
-            exposant: ManuallyDrop::new(exposant.into()),
+            exponant: ManuallyDrop::new(exponant.into()),
             set,
         }
     }
@@ -48,7 +48,7 @@ impl<T: Set> Pow<T> {
 impl<T: Set, E: Set> Drop for Pow<T, E> {
     fn drop(&mut self) {
         unsafe {
-            ManuallyDrop::drop(&mut self.exposant);
+            ManuallyDrop::drop(&mut self.exponant);
         }
     }
 }
@@ -56,23 +56,38 @@ impl<T: Set> Print for Pow<T> {
     fn print(&self, options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Self::group(&self.base, options, f)?;
         Self::operator("^", options, f)?;
-        Self::group(&**self.exposant, options, f)?;
+        Self::group(&**self.exponant, options, f)?;
         Ok(())
     }
 }
 
 impl<T: Set> PrettyPrint for Pow<T> {
-    default fn pretty_print(&self, _options: &PrintOptions) -> crate::printer::PrettyPrinter {
-        todo!()
+    default fn pretty_print(&self, options: &PrintOptions) -> crate::printer::PrettyPrinter {
+        let pow = match **self.exponant {
+            Term::Value(_) if self.exponant.is_strictly_negative() => {
+                let mut pow = self.clone();
+                **pow.exponant = -&**pow.exponant;
+                pow
+            }
+            _ => self.clone(),
+        };
+        let mut base = (*self.base).pretty_print(options);
+        let exponant = (**pow.exponant).pretty_print(options);
+        if matches!(*self.base, Term::Mul(_) | Term::Add(_)) {
+            base.paren();
+        }
+        base.pow(&exponant);
+        base
     }
 }
+
 impl<T: Ring> PrettyPrint for Pow<T> {
     fn pretty_print(&self, options: &PrintOptions) -> crate::printer::PrettyPrinter {
-        // If exposant is negative, print as a fraction
-        let pow = match **self.exposant {
-            Term::Value(_) if self.exposant.is_strictly_negative() => {
+        // If exponant is negative, print as a fraction
+        let pow = match **self.exponant {
+            Term::Value(_) if self.exponant.is_strictly_negative() => {
                 let mut pow = self.clone();
-                **pow.exposant = -&**pow.exposant;
+                **pow.exponant = -&**pow.exponant;
                 match Term::Pow(pow.clone()).normalize() {
                     Term::Pow(pow) => pow,
                     normalized => {
@@ -85,13 +100,13 @@ impl<T: Ring> PrettyPrint for Pow<T> {
             _ => self.clone(),
         };
         let mut base = (*self.base).pretty_print(options);
-        let exposant = (**pow.exposant).pretty_print(options);
+        let exponant = (**pow.exponant).pretty_print(options);
         if matches!(*self.base, Term::Mul(_) | Term::Add(_)) {
             base.paren();
         }
-        base.pow(&exposant);
-        match **self.exposant {
-            Term::Value(_) if self.exposant.is_strictly_negative() => {
+        base.pow(&exponant);
+        match **self.exponant {
+            Term::Value(_) if self.exponant.is_strictly_negative() => {
                 let mut res = PrettyPrint::pretty_print(&Term::one(self.set), options);
                 res.vertical_concat("─", &base);
                 res

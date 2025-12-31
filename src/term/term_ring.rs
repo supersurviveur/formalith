@@ -5,7 +5,7 @@ use std::cmp::Ordering;
 use malachite::Integer;
 
 use crate::{
-    field::{Field, Group, Ring, RingBound, Set, Z},
+    field::{Field, Group, Ring, Set, Z},
     printer::{PrettyPrint, Print},
     term::{Normalize, flags::Flags},
     traits::optional_default::OptionalDefault,
@@ -30,51 +30,17 @@ impl<T> TermSet<T> {
 }
 
 impl<T: Set> Set for TermSet<T> {
-    default type Element = Term<T>;
+    type Element = Term<T>;
 
     default type ExponantSet = Z<Integer>;
 
     default type ProductCoefficientSet = Z<Integer>;
 
-    default fn get_exposant_set(&self) -> Self::ExponantSet {
+    default fn get_exponant_set(&self) -> Self::ExponantSet {
         Self::ExponantSet::optional_default().unwrap()
     }
     default fn get_coefficient_set(&self) -> Self::ProductCoefficientSet {
         Self::ProductCoefficientSet::optional_default().unwrap()
-    }
-
-    default fn print(
-        &self,
-        _elem: &Self::Element,
-        _options: &crate::printer::PrintOptions,
-        _f: &mut std::fmt::Formatter<'_>,
-    ) -> std::fmt::Result {
-        todo!()
-    }
-
-    default fn pretty_print(
-        &self,
-        _elem: &Self::Element,
-        _options: &crate::printer::PrintOptions,
-    ) -> crate::printer::PrettyPrinter {
-        todo!()
-    }
-    default fn parse_literal(&self, _value: &str) -> Result<Self::Element, String> {
-        todo!()
-    }
-}
-impl<T: Ring> Set for TermSet<T> {
-    type Element = Term<T>;
-
-    type ExponantSet = Self;
-
-    type ProductCoefficientSet = Self;
-
-    fn get_exposant_set(&self) -> Self::ExponantSet {
-        *self
-    }
-    fn get_coefficient_set(&self) -> Self::ProductCoefficientSet {
-        *self
     }
 
     fn print(
@@ -93,15 +59,30 @@ impl<T: Ring> Set for TermSet<T> {
     ) -> crate::printer::PrettyPrinter {
         PrettyPrint::pretty_print(elem, options)
     }
-    fn parse_literal(&self, value: &str) -> Result<Term<T>, String> {
+    fn parse_literal(&self, value: &str) -> Result<Self::Element, String> {
         Ok(Term::Value(Value::new(
             self.0.parse_literal(value)?,
             *self.get_set(),
         )))
     }
+    fn partial_cmp(&self, a: &Self::Element, b: &Self::Element) -> Option<Ordering> {
+        PartialOrd::partial_cmp(a, b)
+    }
+}
+impl<T: Ring> Set for TermSet<T> {
+    type ExponantSet = Self;
+
+    type ProductCoefficientSet = Self;
+
+    fn get_exponant_set(&self) -> Self::ExponantSet {
+        *self
+    }
+    fn get_coefficient_set(&self) -> Self::ProductCoefficientSet {
+        *self
+    }
 }
 
-impl<T: Ring> Group for TermSet<T> {
+impl<T: Group> Group for TermSet<T> {
     fn zero(&self) -> Self::Element {
         Term::Value(Value::new(self.get_set().zero(), *self.get_set()))
     }
@@ -117,10 +98,6 @@ impl<T: Ring> Group for TermSet<T> {
 
     fn neg(&self, a: &Self::Element) -> Self::Element {
         -a
-    }
-
-    fn partial_cmp(&self, a: &Self::Element, b: &Self::Element) -> Option<Ordering> {
-        PartialOrd::partial_cmp(a, b)
     }
 }
 
@@ -141,4 +118,4 @@ impl<T: Ring> Ring for TermSet<T> {
     }
 }
 
-impl<T: Field + RingBound> Field for TermSet<T> {}
+impl<T: Field + Ring> Field for TermSet<T> {}

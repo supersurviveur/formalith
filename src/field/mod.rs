@@ -18,17 +18,17 @@ use typenum::{U0, U1, U2, U3, U4, U5, U6, U7, U8, U9, U10};
 /// A set.
 pub trait Set: Clone + Copy + fmt::Debug + PartialEq + Eq + Hash + 'static {
     /// The type of the elements living in this set
-    type Element: Clone + fmt::Debug + fmt::Display + PartialEq + Eq + PartialOrd + Hash;
+    type Element: Clone + fmt::Debug + PartialEq + Eq + Hash;
 
-    /// The set where exposants live. Mostly [const@commons::Z], but it can be any group,
+    /// The set where exponants live. Mostly [const@commons::Z], but it can be any group,
     /// like [const@R] for real numbers since power is not only a notation for `x*x*...*x` but a defined operation.
     type ExponantSet: Group + OptionalDefault = Z<Integer>;
 
     /// The set where coefficients in product live. Mostly [const@commons::Z], but it can be any ring.
     type ProductCoefficientSet: Ring + OptionalDefault = Z<Integer>;
 
-    /// Get the exposant set for this set
-    fn get_exposant_set(&self) -> Self::ExponantSet;
+    /// Get the exponant set for this set
+    fn get_exponant_set(&self) -> Self::ExponantSet;
 
     /// Get the coefficient set for this set
     fn get_coefficient_set(&self) -> Self::ProductCoefficientSet;
@@ -40,6 +40,7 @@ pub trait Set: Clone + Copy + fmt::Debug + PartialEq + Eq + Hash + 'static {
         options: &PrintOptions,
         f: &mut std::fmt::Formatter<'_>,
     ) -> std::fmt::Result;
+
     /// Pretty print an element of this set.
     fn pretty_print(&self, elem: &Self::Element, options: &PrintOptions) -> PrettyPrinter;
 
@@ -55,6 +56,9 @@ pub trait Set: Clone + Copy + fmt::Debug + PartialEq + Eq + Hash + 'static {
     fn get_term_set(&self) -> TermSet<Self> {
         TermSet::new(*self)
     }
+
+    /// Compares two elements of this group if possible, returns `None` otherwise
+    fn partial_cmp(&self, a: &Self::Element, b: &Self::Element) -> Option<Ordering>;
 }
 
 /// A group is a set and a binary operation `+` and :
@@ -66,8 +70,8 @@ pub trait Group: Set {
     fn zero(&self) -> Self::Element;
     /// Check if a number is zero.
     ///
-    /// Defaults to an equality check with [Group::zero], but it's not always a desired behaviour :
-    /// `10`in `Z/5Z` is zero (in its equivalence class)
+    /// Defaults to an equality check with [Group::zero], but it's not always a desired behaviour :
+    /// `10` in `Z/5Z` is zero (in its equivalence class)
     #[inline(always)]
     fn is_zero(&self, a: &Self::Element) -> bool {
         *a == self.zero()
@@ -97,9 +101,6 @@ pub trait Group: Set {
         *a = self.sub(a, b);
     }
 
-    /// Compares two elements of this group if possible, returns `None` otherwise
-    fn partial_cmp(&self, a: &Self::Element, b: &Self::Element) -> Option<Ordering>;
-
     /// Checks if a is greater or equal than zero in this group.
     fn is_positive(&self, a: &Self::Element) -> bool {
         self.is_zero(a) || self.is_strictly_positive(a)
@@ -121,23 +122,17 @@ pub trait Group: Set {
     }
 }
 
-/// [Set] trait with additional bounds, limiting exposant set recursion depth.
+/// [Set] trait with additional bounds, limiting exponant set recursion depth.
 ///
 /// Auto implemented.
 pub trait SetBound: Set<ExponantSet: Set<ExponantSet = Self::ExponantSet>> {}
 impl<T: Set<ExponantSet: Set<ExponantSet = Self::ExponantSet>>> SetBound for T {}
 
-/// [Group] trait with additional bounds, limiting exposant set recursion depth.
-///
-/// Auto implemented.
-pub trait GroupBound: Group<ExponantSet: Group> + SetBound {}
-impl<T: Group<ExponantSet: Group> + SetBound> GroupBound for T {}
-
 /// Same as [GroupBound] for [Ring] trait.
 ///
 /// Auto implemented.
-pub trait RingBound: Ring<ExponantSet: Ring> {}
-impl<T: Ring<ExponantSet: Ring>> RingBound for T {}
+pub trait RingBound: Ring<ExponantSet: Ring> + SetBound {}
+impl<T: Ring<ExponantSet: Ring> + SetBound> RingBound for T {}
 
 /// Trait to cast an element from a set to another set.
 pub trait TryElementFrom<T: Set>: Set {
@@ -156,12 +151,12 @@ impl<T: Set> TryElementFrom<T> for T {
 /// - `*` is associative
 /// - `*` has an identity element `one`
 /// - `*` is distributive over `+`
-pub trait Ring: GroupBound {
+pub trait Ring: Group {
     /// Get the one (aka identity element for `*`) of this group
     fn one(&self) -> Self::Element;
     /// Check if a number is one.
     ///
-    /// Defaults to an equality check with [Ring::one], but it's not always a desired behaviour :
+    /// Defaults to an equality check with [Ring::one], but it's not always a desired behaviour :
     /// `11`in `Z/5Z` is one (in its equivalence class)
     #[inline(always)]
     fn is_one(&self, a: &Self::Element) -> bool {
@@ -307,8 +302,8 @@ where
             Term::Pow(pow) => Ok(Pow::new(
                 Box::new(self.try_from_expr((*pow.base).clone())?),
                 Box::new(
-                    self.get_exposant_set()
-                        .try_from_expr((**pow.exposant).clone())?,
+                    self.get_exponant_set()
+                        .try_from_expr((**pow.exponant).clone())?,
                 ),
                 *self,
             )

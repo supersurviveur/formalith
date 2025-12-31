@@ -3,7 +3,7 @@
 use std::fmt::Display;
 
 use crate::{
-    field::{Group, Ring, RingBound, Set},
+    field::{Group, Ring, Set},
     printer::{PrettyPrint, PrettyPrinter, Print, PrintOptions},
     term::{Normalize, Value},
 };
@@ -118,19 +118,13 @@ impl<'a, T: Set> IntoIterator for &'a Mul<T> {
     }
 }
 
-
 impl<T: Set> Print for Mul<T> {
     fn print(&self, options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Print the cefficient at the beginning of the product
         if self.has_coeff() {
-            Self::group(
-                &Term::Value(Value::new(
-                    self.coefficient.clone(),
-                    self.set.get_coefficient_set(),
-                )),
-                options,
-                f,
-            )?;
+            self.set
+                .get_coefficient_set()
+                .print(&self.coefficient, options, f)?;
         }
         for (i, factor) in self.factors.iter().enumerate() {
             Self::group(factor, options, f)?;
@@ -141,14 +135,12 @@ impl<T: Set> Print for Mul<T> {
         Ok(())
     }
 }
-impl<T: Set> PrettyPrint for Mul<T> {
-    default fn pretty_print(&self, _options: &PrintOptions) -> crate::printer::PrettyPrinter {
-        todo!()
-    }
-}
-
-impl<T: RingBound> PrettyPrint for Mul<T> {
-    fn pretty_print(&self, options: &PrintOptions) -> crate::printer::PrettyPrinter {
+impl<T: Set> Mul<T> {
+    fn pretty_print_default<F: Fn() -> crate::printer::PrettyPrinter>(
+        &self,
+        f: F,
+        options: &PrintOptions,
+    ) -> crate::printer::PrettyPrinter {
         let mut den: Option<PrettyPrinter> = None;
         let mut num: Option<PrettyPrinter> = None;
         // Print the cefficient at the beginning of the product
@@ -163,9 +155,9 @@ impl<T: RingBound> PrettyPrint for Mul<T> {
         }
         for factor in self.factors.iter() {
             let printed = match factor {
-                Term::Pow(pow) if pow.exposant.is_strictly_negative() => {
+                Term::Pow(pow) if pow.exponant.is_strictly_negative() => {
                     let mut factor = pow.clone();
-                    **factor.exposant = -&**factor.exposant;
+                    **factor.exponant = -&**factor.exponant;
                     &Term::Pow(factor).normalize()
                 }
                 _ => factor,
@@ -175,7 +167,7 @@ impl<T: RingBound> PrettyPrint for Mul<T> {
                 elem.paren();
             }
             match factor {
-                Term::Pow(pow) if pow.exposant.is_strictly_negative() => {
+                Term::Pow(pow) if pow.exponant.is_strictly_negative() => {
                     if let Some(den) = &mut den {
                         den.concat("⋅", false, &elem)
                     } else {
@@ -192,15 +184,25 @@ impl<T: RingBound> PrettyPrint for Mul<T> {
             };
         }
 
-        let mut num = if let Some(num) = num {
-            num
-        } else {
-            PrettyPrint::pretty_print(&Term::one(self.set), options)
-        };
+        let mut num = num.unwrap_or_else(f);
         if let Some(den) = den {
             num.vertical_concat("─", &den);
         }
         num
+    }
+}
+impl<T: Set> PrettyPrint for Mul<T> {
+    default fn pretty_print(&self, options: &PrintOptions) -> crate::printer::PrettyPrinter {
+        self.pretty_print_default(|| unreachable!("Pretty printing a `Mul` in a set or a group should return a numerator. This is a bug, this product is not normalized or represents an impossible product (not living in a ring)"), options)
+    }
+}
+
+impl<T: Ring> PrettyPrint for Mul<T> {
+    fn pretty_print(&self, options: &PrintOptions) -> crate::printer::PrettyPrinter {
+        self.pretty_print_default(
+            || PrettyPrint::pretty_print(&Term::one(self.set), options),
+            options,
+        )
     }
 }
 

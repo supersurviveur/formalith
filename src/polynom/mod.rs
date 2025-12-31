@@ -24,21 +24,21 @@ impl<T: Debug + Clone + PartialEq + Eq + Hash + PartialOrd + PrettyPrint> Monomi
 type Monom<V, U> = (V, <U as Set>::Element);
 type PolynomElement<V, U, T> = (Vec<Monom<V, U>>, <T as Set>::Element);
 
-/// A multivariate polynomial, living in `T` with exposant in `U`. Variables can be any type implementing [Monomial], like [crate::context::Symbol] or [Term].
+/// A multivariate polynomial, living in `T` with exponant in `U`. Variables can be any type implementing [Monomial], like [crate::context::Symbol] or [Term].
 #[derive(Debug, Clone, PartialEq, Hash)]
 pub struct MultivariatePolynomial<V, T: Set, U: Set> {
     terms: Vec<PolynomElement<V, U, T>>,
     set: T,
-    exposant_set: U,
+    exponant_set: U,
 }
 
 impl<V, T: Set, U: Set> MultivariatePolynomial<V, T, U> {
     /// Create a new polynomial from its terms and sets.
-    pub fn new(terms: Vec<PolynomElement<V, U, T>>, set: T, exposant_set: U) -> Self {
+    pub fn new(terms: Vec<PolynomElement<V, U, T>>, set: T, exponant_set: U) -> Self {
         Self {
             terms,
             set,
-            exposant_set,
+            exponant_set,
         }
     }
     /// Check if the polynom is a constant.
@@ -47,11 +47,11 @@ impl<V, T: Set, U: Set> MultivariatePolynomial<V, T, U> {
     }
 
     /// Create a new constant polynomial.
-    pub fn constant(coeff: T::Element, set: T, exposant_set: U) -> Self {
+    pub fn constant(coeff: T::Element, set: T, exponant_set: U) -> Self {
         Self {
             terms: vec![(vec![], coeff)],
             set,
-            exposant_set,
+            exponant_set,
         }
     }
 }
@@ -63,18 +63,18 @@ impl<V, T: Group, U: Set> MultivariatePolynomial<V, T, U> {
     }
 
     /// Create a new constant polynomial equal to zero.
-    pub fn zero(set: T, exposant_set: U) -> Self {
-        Self::constant(set.zero(), set, exposant_set)
+    pub fn zero(set: T, exponant_set: U) -> Self {
+        Self::constant(set.zero(), set, exponant_set)
     }
 }
 
 impl<V, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
     /// Create a new monomial containing `var`.
-    pub fn variable(var: V, set: T, exposant_set: U) -> Self {
+    pub fn variable(var: V, set: T, exponant_set: U) -> Self {
         Self {
-            terms: vec![(vec![(var, exposant_set.one())], set.one())],
+            terms: vec![(vec![(var, exponant_set.one())], set.one())],
             set,
-            exposant_set,
+            exponant_set,
         }
     }
 }
@@ -85,8 +85,8 @@ impl<V, T: Ring, U: Set> MultivariatePolynomial<V, T, U> {
         self.is_constant() && self.set.is_one(&self.terms[0].1)
     }
     /// Create a new constant polynomial equal to one.
-    pub fn one(set: T, exposant_set: U) -> Self {
-        Self::constant(set.one(), set, exposant_set)
+    pub fn one(set: T, exponant_set: U) -> Self {
+        Self::constant(set.one(), set, exponant_set)
     }
 }
 
@@ -94,13 +94,13 @@ impl<V: Monomial, T: Set, U: Group> MultivariatePolynomial<V, T, U> {
     fn combine_vars(
         vars1: &[(V, U::Element)],
         vars2: &[(V, U::Element)],
-        exposant_set: U,
+        exponant_set: U,
     ) -> Vec<(V, U::Element)> {
         let mut combined = HashMap::new();
 
         for (v, e) in vars1.iter().chain(vars2.iter()) {
-            *combined.entry(v.clone()).or_insert(exposant_set.zero()) =
-                exposant_set.add(combined.get(v).unwrap_or(&exposant_set.zero()), e);
+            *combined.entry(v.clone()).or_insert(exponant_set.zero()) =
+                exponant_set.add(combined.get(v).unwrap_or(&exponant_set.zero()), e);
         }
 
         let mut sorted: Vec<_> = combined.into_iter().collect();
@@ -121,13 +121,13 @@ impl<V: Monomial, T: Set, U: Group> MultivariatePolynomial<V, T, U> {
                 .map(|(_, e)| e.clone())
                 .collect::<Vec<_>>();
 
-            let exp = var_exponents.pop().unwrap_or(self.exposant_set.zero());
+            let exp = var_exponents.pop().unwrap_or(self.exponant_set.zero());
             let remaining_vars = vars.iter().filter(|(v, _)| v != var).cloned().collect();
 
             coefficients.push(Self {
                 terms: vec![(remaining_vars, coeff.clone())],
                 set: self.set,
-                exposant_set: self.exposant_set,
+                exponant_set: self.exponant_set,
             });
             exponents.push(exp);
         }
@@ -147,7 +147,7 @@ pub trait ToTerm<Out: Set> {
     fn to_term(&self) -> Term<Out>;
 }
 
-impl<V: Monomial, T: Ring, U: Ring> ToTerm<T> for MultivariatePolynomial<V, T, U>
+impl<V: Monomial, T: Ring, U: Set> ToTerm<T> for MultivariatePolynomial<V, T, U>
 where
     Term<T>: From<V>,
     Term<T::ExponantSet>: From<U::Element>,
@@ -198,7 +198,7 @@ where
 
             for (i, (v, exp)) in new_vars.iter_mut().enumerate() {
                 if v == var {
-                    let new_exp = self.exposant_set.sub(exp, &self.exposant_set.one());
+                    let new_exp = self.exponant_set.sub(exp, &self.exponant_set.one());
                     let new_coeff = if let Ok(new_coeff) =
                         T::try_from_element(exp.clone()).map(|c| self.set.mul(coeff, &c))
                     {
@@ -209,14 +209,14 @@ where
                             vec![(
                                 V::try_from(exp.clone())
                                     .expect("Exponent must be convertible to T or V"),
-                                self.exposant_set.one(),
+                                self.exponant_set.one(),
                             )],
                             self.set.one(),
                         ));
                         coeff.clone()
                     };
 
-                    if self.exposant_set.is_zero(&new_exp) {
+                    if self.exponant_set.is_zero(&new_exp) {
                         new_vars.remove(i);
                     } else {
                         *exp = new_exp;
@@ -231,7 +231,7 @@ where
         Self {
             terms,
             set: self.set,
-            exposant_set: self.exposant_set,
+            exponant_set: self.exponant_set,
         }
     }
 }
@@ -247,12 +247,12 @@ where
             .map(|(vars, _)| {
                 vars.iter()
                     .map(|(_, e)| e.clone())
-                    .fold(self.exposant_set.zero(), |a, b| {
-                        self.exposant_set.add(&a, &b)
+                    .fold(self.exponant_set.zero(), |a, b| {
+                        self.exponant_set.add(&a, &b)
                     })
             })
             .max()
-            .unwrap_or(self.exposant_set.zero())
+            .unwrap_or(self.exponant_set.zero())
     }
 }
 impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
@@ -260,21 +260,21 @@ impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
     fn from_term_map(
         map: HashMap<Vec<(V, U::Element)>, T::Element>,
         set: T,
-        exposant_set: U,
+        exponant_set: U,
     ) -> Self {
         let mut res = Self {
             terms: map.into_iter().collect(),
             set,
-            exposant_set,
+            exponant_set,
         };
         MultivariatePolynomial::normalize(&mut res);
         res
     }
-    fn from_term(term: PolynomElement<V, U, T>, set: T, exposant_set: U) -> Self {
+    fn from_term(term: PolynomElement<V, U, T>, set: T, exponant_set: U) -> Self {
         let mut res = Self {
             terms: vec![term],
             set,
-            exposant_set,
+            exponant_set,
         };
         MultivariatePolynomial::normalize(&mut res);
         res
@@ -287,7 +287,7 @@ impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
         // Sort variables in monomials
         self.terms.iter_mut().for_each(|monomial| {
             // Remove variables
-            monomial.0.retain(|(_, e)| !self.exposant_set.is_zero(e));
+            monomial.0.retain(|(_, e)| !self.exponant_set.is_zero(e));
             monomial
                 .0
                 .sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
@@ -296,7 +296,9 @@ impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
         self.terms.sort_by(|a, b| {
             b.0.iter()
                 .map(|(_, e)| e.clone())
-                .partial_cmp(a.0.iter().map(|(_, e)| e.clone()))
+                .partial_cmp_by(a.0.iter().map(|(_, e)| e.clone()), |a, b| {
+                    self.exponant_set.partial_cmp(&a, &b)
+                })
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
     }
@@ -308,7 +310,7 @@ impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
         denom_vars: &[(V, U::Element)],
         denom_coeff: &T::Element,
         set: T,
-        exposant_set: U,
+        exponant_set: U,
     ) -> Option<PolynomElement<V, U, T>> {
         let denom_inv = set.try_inv(denom_coeff).unwrap();
         let q_coeff = set.mul(num_coeff, &denom_inv);
@@ -318,11 +320,14 @@ impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
             match var_map.get_mut(v) {
                 Some(current_exp) => {
                     // println!("{} < {} : {}", current_exp, e, *current_exp < *e);
-                    if *current_exp < *e {
+                    if matches!(
+                        exponant_set.partial_cmp(current_exp, e),
+                        Some(std::cmp::Ordering::Less)
+                    ) {
                         return None;
                     }
-                    *current_exp = exposant_set.sub(current_exp, e);
-                    if exposant_set.is_zero(current_exp) {
+                    *current_exp = exponant_set.sub(current_exp, e);
+                    if exponant_set.is_zero(current_exp) {
                         var_map.remove(v);
                     }
                 }
@@ -343,8 +348,8 @@ impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
             self.stdout(),
             divisor.stdout()
         );
-        let mut quotient = Self::zero(self.set, self.exposant_set);
-        let mut remainder = Self::zero(self.set, self.exposant_set);
+        let mut quotient = Self::zero(self.set, self.exponant_set);
+        let mut remainder = Self::zero(self.set, self.exponant_set);
         let mut current_dividend = self.clone();
 
         while !current_dividend.is_zero() {
@@ -357,12 +362,12 @@ impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
                 &div_vars,
                 &div_coeff,
                 self.set,
-                self.exposant_set,
+                self.exponant_set,
             ) {
                 Some((q_vars, q_coeff)) => {
                     // trace!("{}", q_vars[0].1);
                     // std::thread::sleep_ms(300);
-                    let term_poly = Self::from_term((q_vars, q_coeff), self.set, self.exposant_set);
+                    let term_poly = Self::from_term((q_vars, q_coeff), self.set, self.exponant_set);
 
                     quotient = &quotient + &term_poly;
 
@@ -372,7 +377,7 @@ impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
                 }
                 None => {
                     let term =
-                        Self::from_term((lead_vars, lead_coeff), self.set, self.exposant_set);
+                        Self::from_term((lead_vars, lead_coeff), self.set, self.exponant_set);
                     remainder = remainder + &term;
                     current_dividend = &current_dividend - &term;
                 }
@@ -389,7 +394,7 @@ impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
         (quotient, remainder)
     }
     /// Compute GCD between self and other using euclide algorithm
-    /// TODO divide by coefficient of higher exposant to get a unitary polynomial
+    /// TODO divide by coefficient of higher exponant to get a unitary polynomial
     pub fn gcd(&self, other: &Self) -> Self {
         if other.is_zero() {
             return self.clone();
@@ -403,7 +408,7 @@ impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
                 * &Self::constant(
                     self.set.try_inv(&leading_coeff).unwrap(),
                     self.set,
-                    self.exposant_set,
+                    self.exponant_set,
                 );
         }
         res
@@ -413,7 +418,7 @@ impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
         let (coeffs, _) = self.separate_variable(var);
         coeffs
             .into_iter()
-            .fold(Self::one(self.set, self.exposant_set), |acc, x| acc.gcd(&x))
+            .fold(Self::one(self.set, self.exponant_set), |acc, x| acc.gcd(&x))
     }
     /// Primitive part of the polynomial
     pub fn primitive_part(&self, var: &V) -> Self {
@@ -441,7 +446,7 @@ impl<V: Monomial, T: Ring, U: Ring> std::ops::Add for &MultivariatePolynomial<V,
                 .add(term_map.get(vars).unwrap_or(&self.set.zero()), coeff);
         }
 
-        MultivariatePolynomial::from_term_map(term_map, self.set, self.exposant_set)
+        MultivariatePolynomial::from_term_map(term_map, self.set, self.exponant_set)
     }
 }
 
@@ -472,7 +477,7 @@ impl<V: Monomial, T: Ring, U: Ring> std::ops::Mul for &MultivariatePolynomial<V,
                 let combined_vars = MultivariatePolynomial::<V, T, U>::combine_vars(
                     vars1,
                     vars2,
-                    self.exposant_set,
+                    self.exponant_set,
                 );
                 let product_coeff = self.set.mul(coeff1, coeff2);
 
@@ -483,7 +488,7 @@ impl<V: Monomial, T: Ring, U: Ring> std::ops::Mul for &MultivariatePolynomial<V,
             }
         }
 
-        MultivariatePolynomial::<V, T, U>::from_term_map(term_map, self.set, self.exposant_set)
+        MultivariatePolynomial::<V, T, U>::from_term_map(term_map, self.set, self.exponant_set)
     }
 }
 
@@ -521,7 +526,7 @@ impl<V: Monomial, T: Ring, U: Ring> std::ops::Sub for &MultivariatePolynomial<V,
                 .sub(term_map.get(vars).unwrap_or(&self.set.zero()), coeff);
         }
 
-        MultivariatePolynomial::<V, T, U>::from_term_map(term_map, self.set, self.exposant_set)
+        MultivariatePolynomial::<V, T, U>::from_term_map(term_map, self.set, self.exponant_set)
     }
 }
 
@@ -584,7 +589,7 @@ where
         let mut var_counts = HashMap::new();
         for (vars, _) in &self.terms {
             for (v, e) in vars {
-                if !self.exposant_set.is_zero(e) {
+                if !self.exponant_set.is_zero(e) {
                     *var_counts.entry(v.clone()).or_insert(0) += 1;
                 }
             }
@@ -605,14 +610,14 @@ impl<V: Monomial + Print, T: Ring, U: Set> Print for MultivariatePolynomial<V, T
                 self.set.print(coeff, options, f)?;
             }
 
-            for (i, (var, exposant)) in vars.iter().enumerate() {
+            for (i, (var, exponant)) in vars.iter().enumerate() {
                 if i == 0 && !has_coeff {
                 } else {
                     write!(f, "*")?
                 }
                 var.print(options, f)?;
                 write!(f, "^")?;
-                self.exposant_set.print(exposant, options, f)?;
+                self.exponant_set.print(exponant, options, f)?;
             }
             if j != self.terms.len() - 1 {
                 write!(f, "+")?;
@@ -632,10 +637,10 @@ impl<V: Monomial, T: Ring, U: Ring> PrettyPrint for MultivariatePolynomial<V, T,
                 PrettyPrinter::empty()
             };
 
-            for (i, (var, exposant)) in vars.iter().enumerate() {
+            for (i, (var, exponant)) in vars.iter().enumerate() {
                 let mut var = var.pretty_print(options);
-                if !self.exposant_set.is_one(exposant) {
-                    var.pow(&self.exposant_set.pretty_print(exposant, options));
+                if !self.exponant_set.is_one(exponant) {
+                    var.pow(&self.exponant_set.pretty_print(exponant, options));
                 }
                 coeff.concat(if i == 0 && !has_coeff { "" } else { "⋅" }, false, &var);
             }

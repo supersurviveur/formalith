@@ -62,7 +62,7 @@ impl<T: PrettyPrint> Display for Printer<'_, T> {
 }
 
 /// Elements and expressions which can be printed using options.
-pub trait Print: Debug {
+pub trait Print {
     /// Create e new printer for self with specific options.
     fn with_options<'a>(&'a self, options: PrintOptions) -> Printer<'a, Self>
     where
@@ -356,7 +356,7 @@ impl PrettyPrinter {
             self.lines.push(line);
         }
     }
-    /// Put other as an exposant of self.
+    /// Put other as an exponant of self.
     ///
     /// ```no_test
     ///     other

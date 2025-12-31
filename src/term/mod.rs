@@ -51,12 +51,6 @@ pub enum Term<T: Set> {
 }
 
 impl<T: Set> std::cmp::PartialOrd for Term<T> {
-    default fn partial_cmp(&self, _other: &Self) -> Option<std::cmp::Ordering> {
-        todo!()
-    }
-}
-
-impl<T: Group> std::cmp::PartialOrd for Term<T> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match (self, other) {
             (Term::Value(Value { value: v1, .. }), Term::Value(Value { value: v2, .. })) => {
@@ -215,7 +209,7 @@ impl<T: Group> Term<T> {
             (Term::Pow(p1), Term::Pow(p2)) => p1
                 .base
                 .cmp(&p2.base)
-                .then_with(|| p1.exposant.cmp(&p2.exposant)),
+                .then_with(|| p1.exponant.cmp(&p2.exponant)),
             (Term::Pow(_), _) => Ordering::Less,
             (_, Term::Pow(_)) => Ordering::Greater,
             (Term::Mul(m1), Term::Mul(m2)) => {
@@ -345,7 +339,7 @@ where
     pub fn det(&self) -> MatrixResult<Term<T>> {
         match self {
             Term::Value(value) => match &value.value {
-                VectorSpaceElement::Scalar(scalar) => Ok(scalar.clone()),
+                VectorSpaceElement::Scalar(scalar, _) => Ok(scalar.clone()),
                 VectorSpaceElement::Vector(matrix) => Ok(matrix.det()?),
             },
             Term::Add(_) | Term::Mul(_) | Term::Pow(_) | Term::Symbol(_) | Term::Fun(_) => {
@@ -373,9 +367,9 @@ impl<T: Set> Term<T> {
     fn convert_to_pow(
         &mut self,
         base: Box<Term<T>>,
-        exposant: Box<Term<<T as Set>::ExponantSet>>,
+        exponant: Box<Term<<T as Set>::ExponantSet>>,
     ) -> &mut Pow<T> {
-        *self = Pow::new(base, exposant, self.get_set()).into();
+        *self = Pow::new(base, exponant, self.get_set()).into();
         if let Term::Pow(n) = self {
             n
         } else {
@@ -397,6 +391,12 @@ pub trait Normalize {
     /// Normalize an expression, i.e. sort sums and products, merge expressions that can be merged, remove useless expressions like zero in sums.
     fn normalize(&self) -> Self;
 }
+/// Unification trait.
+pub trait Unify {
+    /// Return the expression as a rational expression
+    fn unify(&self) -> Self;
+}
+
 /// Expansion trait.
 pub trait Expand {
     /// Expand the expression.
@@ -406,10 +406,14 @@ pub trait Expand {
     /// assert_eq!(parse!("(x+2)*(x+3)", R).expand(), parse!("x*x+5*x+6", R));
     /// ```
     fn expand(&self) -> Self;
+
+    /// Expand the expression without normalizing it
+    fn expand_without_norm(&self) -> Self;
 }
 
 impl<T: Set> MergeTerms for Term<T> {
     default fn merge_terms(&mut self, _other: &Self) -> bool {
+        // There is no addition in a set
         false
     }
 }
@@ -492,7 +496,7 @@ impl<T: Group> MergeTerms for Term<T> {
                     true
                 }
             }
-            (Term::Pow(p1), Term::Pow(p2)) if p1.base == p2.base && p1.exposant == p2.exposant => {
+            (Term::Pow(p1), Term::Pow(p2)) if p1.base == p2.base && p1.exponant == p2.exponant => {
                 // Merge x^2 + x^2
                 *self = Term::Mul(Mul::new(
                     p1.set.get_coefficient_set().nth(2),
@@ -509,6 +513,7 @@ impl<T: Group> MergeTerms for Term<T> {
 
 impl<T: Set> MergeFactors for Term<T> {
     default fn merge_factors(&mut self, _other: &Self) -> bool {
+        // There is no product in a set and in a group
         false
     }
 }
@@ -519,12 +524,12 @@ impl<T: RingBound> MergeFactors for Term<T> {
             (
                 Term::Value(Value {
                     value: v1,
-                    set: ring1,
+                    set: set1,
                     ..
                 }),
                 Term::Value(Value { value: v2, .. }),
             ) => {
-                ring1.mul_assign(v1, v2);
+                set1.mul_assign(v1, v2);
                 return true;
             }
             (Term::Pow(p1), Term::Pow(p2)) => {
@@ -532,11 +537,11 @@ impl<T: RingBound> MergeFactors for Term<T> {
                 if *p1.base != *p2.base {
                     return false;
                 } else {
-                    **p1.exposant = Term::Add(Add::new(
-                        vec![(**p1.exposant).clone(), (**p2.exposant).clone()],
-                        other.get_set().get_exposant_set(),
+                    **p1.exponant = Term::Add(Add::new(
+                        vec![(**p1.exponant).clone(), (**p2.exponant).clone()],
+                        other.get_set().get_exponant_set(),
                     ));
-                    **p1.exposant = (**p1.exposant).normalize();
+                    **p1.exponant = (**p1.exponant).normalize();
                     return true;
                 }
             }
@@ -544,26 +549,23 @@ impl<T: RingBound> MergeFactors for Term<T> {
                 // Merge x^2 * x
                 if *p1.base != *other {
                     return false;
-                } else if let Term::Value(Value {
-                    value, set: ring, ..
-                }) = &mut **p1.exposant
-                {
+                } else if let Term::Value(Value { value, set, .. }) = &mut **p1.exponant {
                     // Add one to m1 coeff
-                    ring.add_assign(value, &ring.one());
+                    set.add_assign(value, &set.one());
                     return true;
                 } else {
-                    **p1.exposant = Term::Add(Add::new(
+                    **p1.exponant = Term::Add(Add::new(
                         vec![
-                            (**p1.exposant).clone(),
+                            (**p1.exponant).clone(),
                             Value::new(
-                                other.get_set().get_exposant_set().one(),
-                                other.get_set().get_exposant_set(),
+                                other.get_set().get_exponant_set().one(),
+                                other.get_set().get_exponant_set(),
                             )
                             .into(),
                         ],
-                        other.get_set().get_exposant_set(),
+                        other.get_set().get_exponant_set(),
                     ));
-                    **p1.exposant = (**p1.exposant).normalize();
+                    **p1.exponant = (**p1.exponant).normalize();
                     return true;
                 }
             }
@@ -571,14 +573,11 @@ impl<T: RingBound> MergeFactors for Term<T> {
                 // Merge x * x^2
                 if *self != *p2.base {
                     return false;
-                } else if let Term::Value(Value {
-                    value, set: ring, ..
-                }) = &**p2.exposant
-                {
+                } else if let Term::Value(Value { value, set, .. }) = &**p2.exponant {
                     // Transform self to mul and add one to coeff
                     self.convert_to_pow(
                         p2.base.clone(),
-                        Term::Value(Value::new(ring.add(value, &ring.one()), *ring)).into(),
+                        Term::Value(Value::new(set.add(value, &set.one()), *set)).into(),
                     );
                     return true;
                 } else {
@@ -587,14 +586,14 @@ impl<T: RingBound> MergeFactors for Term<T> {
                         p2.base.clone(),
                         Term::Add(Add::new(
                             vec![
-                                (**p2.exposant).clone(),
+                                (**p2.exponant).clone(),
                                 Value::new(
-                                    self.get_set().get_exposant_set().one(),
-                                    self.get_set().get_exposant_set(),
+                                    self.get_set().get_exponant_set().one(),
+                                    self.get_set().get_exponant_set(),
                                 )
                                 .into(),
                             ],
-                            self.get_set().get_exposant_set(),
+                            self.get_set().get_exponant_set(),
                         ))
                         .into(),
                     );
@@ -610,8 +609,8 @@ impl<T: RingBound> MergeFactors for Term<T> {
             *self = Term::Pow(Pow::new(
                 self.clone(),
                 Term::Value(Value::new(
-                    self.get_set().get_exposant_set().nth(2),
-                    self.get_set().get_exposant_set(),
+                    self.get_set().get_exponant_set().nth(2),
+                    self.get_set().get_exponant_set(),
                 )),
                 self.get_set(),
             ))
@@ -639,29 +638,29 @@ impl<T: RingBound> Term<T> {
             Term::Value(_) => MultivariatePolynomial::constant(
                 self.clone(),
                 self.get_set().get_term_set(),
-                self.get_set().get_exposant_set().get_term_set(),
+                self.get_set().get_exponant_set().get_term_set(),
             ),
             Term::Symbol(symbol) => match Context::get_symbol_data(&symbol.symbol).name.as_str() {
                 "n" => MultivariatePolynomial::constant(
                     self.clone(),
                     self.get_set().get_term_set(),
-                    self.get_set().get_exposant_set().get_term_set(),
+                    self.get_set().get_exponant_set().get_term_set(),
                 ),
                 _ => MultivariatePolynomial::variable(
                     self.clone(),
                     self.get_set().get_term_set(),
-                    self.get_set().get_exposant_set().get_term_set(),
+                    self.get_set().get_exponant_set().get_term_set(),
                 ),
             },
             Term::Fun(_) => MultivariatePolynomial::variable(
                 self.clone(),
                 self.get_set().get_term_set(),
-                self.get_set().get_exposant_set().get_term_set(),
+                self.get_set().get_exponant_set().get_term_set(),
             ),
             Term::Add(add) => {
                 let mut res = MultivariatePolynomial::zero(
                     self.get_set().get_term_set(),
-                    self.get_set().get_exposant_set().get_term_set(),
+                    self.get_set().get_exponant_set().get_term_set(),
                 );
 
                 for term in add {
@@ -673,7 +672,7 @@ impl<T: RingBound> Term<T> {
             Term::Mul(mul) => {
                 let mut res = MultivariatePolynomial::one(
                     self.get_set().get_term_set(),
-                    self.get_set().get_exposant_set().get_term_set(),
+                    self.get_set().get_exponant_set().get_term_set(),
                 );
 
                 for factor in mul {
@@ -684,59 +683,23 @@ impl<T: RingBound> Term<T> {
             }
             Term::Pow(pow) => MultivariatePolynomial::new(
                 vec![(
-                    vec![(*pow.base.clone(), (**pow.exposant).clone())],
+                    vec![(*pow.base.clone(), (**pow.exponant).clone())],
                     self.get_set().get_term_set().one(),
                 )],
                 self.get_set().get_term_set(),
-                self.get_set().get_exposant_set().get_term_set(),
+                self.get_set().get_exponant_set().get_term_set(),
             ),
         }
     }
-
-    /// Check if the term is one
-    /// ```
-    /// use formalith::{field::R, parse, symbol};
-    ///
-    /// assert!(parse!("1", R).is_one());
-    /// ```
-    pub fn is_one(&self) -> bool {
-        match self {
-            Term::Value(value) => value.set.is_one(&value.value),
-            Term::Symbol(_) | Term::Add(_) | Term::Mul(_) | Term::Pow(_) => false,
-            Term::Fun(_) => todo!(),
-        }
-    }
 }
-impl<T: RingBound> Expand for Term<T> {
+
+impl<T: Ring> Expand for Term<T> {
     fn expand(&self) -> Self {
         debug_assert!(!self.needs_normalization());
         let res = self.expand_without_norm();
         let res = res.get_set().expand(res);
         res.normalize()
     }
-}
-impl<T: RingBound> Term<T> {
-    /// Factor the expression.
-    pub fn factor(&self) -> Self
-    where
-        TermSet<T>: Ring,
-        TermSet<T>: TryElementFrom<TermSet<T::ExponantSet>>,
-        Term<T>: TryFrom<Term<T::ExponantSet>>,
-        <Term<T> as TryFrom<Term<T::ExponantSet>>>::Error: Debug,
-    {
-        let poly = self.to_polynomial();
-        let factors = poly.factor();
-        let mut res = Term::one(self.get_set());
-        for (factor, multiplicity) in factors {
-            res *= factor.to_term().pow(&Term::constant(
-                self.get_set().get_exposant_set().nth(multiplicity.into()),
-                self.get_set().get_exposant_set(),
-            ))
-        }
-        res
-    }
-
-    /// Expand the expression without normalizing it
     fn expand_without_norm(&self) -> Self {
         debug_assert!(!self.needs_normalization());
         match self {
@@ -804,7 +767,7 @@ impl<T: RingBound> Term<T> {
             Term::Pow(pow) => {
                 let mut res = pow.clone();
                 *res.base = (*res.base).expand();
-                **res.exposant = (**res.exposant).expand();
+                **res.exponant = (**res.exponant).expand();
 
                 Term::Pow(res)
             }
@@ -812,8 +775,33 @@ impl<T: RingBound> Term<T> {
         }
     }
 }
+
+impl<T: RingBound> Term<T> {
+    /// Factor the expression.
+    pub fn factor(&self) -> Self
+    where
+        TermSet<T>: Ring,
+        TermSet<T>: TryElementFrom<TermSet<T::ExponantSet>>,
+        Term<T>: TryFrom<Term<T::ExponantSet>>,
+        <Term<T> as TryFrom<Term<T::ExponantSet>>>::Error: Debug,
+    {
+        let poly = self.to_polynomial();
+        let factors = poly.factor();
+        let mut res = Term::one(self.get_set());
+        for (factor, multiplicity) in factors {
+            res *= factor.to_term().pow(&Term::constant(
+                self.get_set().get_exponant_set().nth(multiplicity.into()),
+                self.get_set().get_exponant_set(),
+            ))
+        }
+        res
+    }
+}
 impl<T: Set> Expand for Term<T> {
     default fn expand(&self) -> Self {
+        todo!()
+    }
+    default fn expand_without_norm(&self) -> Self {
         todo!()
     }
 }
@@ -822,8 +810,8 @@ impl<T: Set> Normalize for Term<T> {
         todo!()
     }
 }
-impl<T: RingBound> Normalize for Term<T> {
-    fn normalize(&self) -> Self {
+impl<T: Ring> Term<T> {
+    fn normalize_in_ring(&self) -> Self {
         // return self.clone();
         // if !self.needs_normalization() {
         //     return self.clone();
@@ -921,13 +909,11 @@ impl<T: RingBound> Normalize for Term<T> {
             }
             Term::Pow(pow) => {
                 let base = (*pow.base).normalize();
-                let exposant = (**pow.exposant).normalize();
-                if exposant.is_one() {
-                    return base;
-                } else if exposant.is_zero() {
+                let exponant = (**pow.exponant).normalize();
+                if exponant.is_zero() {
                     return Term::one(self.get_set());
                 }
-                Term::Pow(Pow::new(Box::new(base), Box::new(exposant), self.get_set()))
+                Term::Pow(Pow::new(Box::new(base), Box::new(exponant), self.get_set()))
             }
             Term::Fun(fun) => (**fun).normalize(),
         };
@@ -936,7 +922,26 @@ impl<T: RingBound> Normalize for Term<T> {
         res
     }
 }
-impl<T: RingBound> Term<T> {
+
+impl<T: Ring> Normalize for Term<T> {
+    default fn normalize(&self) -> Self {
+        self.normalize_in_ring()
+    }
+}
+
+impl<T: Ring<ExponantSet: Ring>> Normalize for Term<T> {
+    fn normalize(&self) -> Self {
+        let normalized = self.normalize_in_ring();
+        if let Term::Pow(pow) = &normalized
+            && pow.exponant.is_one()
+        {
+            return *pow.base.clone();
+        }
+        normalized
+    }
+}
+
+impl<T: Ring> Term<T> {
     /// Return the expression as a rational expression, (numerator, denominator)
     pub fn as_fraction(&self, unify: bool) -> (Self, Self) {
         debug_assert!(!self.needs_normalization(), "{self}");
@@ -980,10 +985,10 @@ impl<T: RingBound> Term<T> {
                 let mut pow = pow.clone();
                 if unify {
                     *pow.base = pow.base.unify();
-                    **pow.exposant = pow.exposant.unify();
+                    **pow.exponant = pow.exponant.unify();
                 }
-                if pow.exposant.is_strictly_negative() {
-                    **pow.exposant = -&**pow.exposant;
+                if pow.exponant.is_strictly_negative() {
+                    **pow.exponant = -&**pow.exponant;
                     (Term::one(self.get_set()), pow.into())
                 } else {
                     (pow.into(), Term::one(self.get_set()))
@@ -991,12 +996,23 @@ impl<T: RingBound> Term<T> {
             }
         }
     }
-    /// Return the expression as a rational expression
-    pub fn unify(&self) -> Self {
+}
+
+impl<T: Set> Unify for Term<T> {
+    default fn unify(&self) -> Self {
+        self.clone()
+    }
+}
+
+impl<T: Ring> Unify for Term<T> {
+    fn unify(&self) -> Self {
         debug_assert!(!self.needs_normalization());
         let (num, den) = self.as_fraction(true);
         num / den
     }
+}
+
+impl<T: Ring> Term<T> {
     /// Simplify the expression by applying other simplification functions ([Self::unify], [Self::expand])
     pub fn simplify(&self) -> Self {
         debug_assert!(!self.needs_normalization());
@@ -1018,6 +1034,19 @@ impl<T: Ring> Term<T> {
     /// Return the constant 1
     pub fn one(set: T) -> Self {
         Term::Value(Value::new(set.one(), set))
+    }
+    /// Check if the term is one
+    /// ```
+    /// use formalith::{field::R, parse, symbol};
+    ///
+    /// assert!(parse!("1", R).is_one());
+    /// ```
+    pub fn is_one(&self) -> bool {
+        match self {
+            Term::Value(value) => value.set.is_one(&value.value),
+            Term::Symbol(_) | Term::Add(_) | Term::Mul(_) | Term::Pow(_) => false,
+            Term::Fun(_) => todo!(),
+        }
     }
 }
 

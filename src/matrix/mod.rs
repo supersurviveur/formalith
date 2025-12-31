@@ -133,7 +133,7 @@ impl<T: Set> Print for Matrix<T> {
         for i in 0..self.size.0 {
             Self::group_delim("[", options, f)?;
             for j in i * self.size.0..(i + 1) * self.size.0 {
-                write!(f, "{}", self.data[j])?;
+                self.set.print(&self.data[j], options, f)?;
                 if j != (i + 1) * self.size.0 - 1 {
                     Self::delimiter(",", options, f)?;
                 }
@@ -201,13 +201,7 @@ impl<T: Set> PrettyPrint for Matrix<T> {
 }
 
 impl<T: Set> Display for Matrix<T> {
-    default fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
-    }
-}
-
-impl<T: Group> Display for Matrix<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    default fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         PrettyPrint::fmt(self, &PrintOptions::default(), f)
     }
 }
@@ -229,7 +223,8 @@ impl<T: Ring> Matrix<T> {
                         &self.set.try_inv(&self[(line, pivot)]).unwrap_or_else(|| {
                             panic!(
                                 "Can't execute back substitution, pivot {} isn't inversible",
-                                &self[(line, pivot)]
+                                self.set
+                                    .pretty_print(&self[(line, pivot)], &PrintOptions::default())
                             )
                         }),
                     );
