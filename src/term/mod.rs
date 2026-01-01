@@ -162,11 +162,18 @@ impl<T: Set> Term<T> {
     pub fn new_mul(ring: T) -> Self {
         Term::Mul(Mul::empty(ring))
     }
+    /// Return `self` as [Value] if self is a `Value`, None otherwise.
+    pub fn as_value(self) -> Option<Value<T>> {
+        match self {
+            Term::Value(value) => Some(value),
+            _ => None,
+        }
+    }
     /// Return `self` as [Value].
     ///
     /// # Safety
     /// `self` must be a `Term::Value`, the method is UB otherwise.
-    pub unsafe fn as_value(&mut self) -> &mut Value<T> {
+    pub unsafe fn as_value_unsafe(self) -> Value<T> {
         match self {
             Term::Value(value) => value,
             _ => unreachable!(),
@@ -334,7 +341,7 @@ impl<T: Group> Term<T> {
     }
 }
 
-impl<T: Ring> Term<M<T>> {
+impl<T: Ring> Term<M<TermSet<T>>> {
     /// Compute the determinant of the expression.
     pub fn det(&self) -> MatrixResult<Term<T>> {
         match self {
@@ -346,7 +353,7 @@ impl<T: Ring> Term<M<T>> {
                 Ok(Term::Fun(Box::new(Fun::new(
                     Context::DET,
                     vec![self.clone()],
-                    self.get_set().scalar_sub_set,
+                    *self.get_set().scalar_sub_set.get_set(),
                 )) as Box<dyn Function<T>>))
             }
         }

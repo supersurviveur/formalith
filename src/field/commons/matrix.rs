@@ -9,9 +9,9 @@ use std::{
 use crate::{
     field::{Group, PartiallyOrderedSet, Ring, Set, SetParseExpression, real::R},
     matrix::{Matrix, MatrixResult},
-    parser::{Parser, ParserError, ParserTraitBounded, lexer::TokenKind},
+    parser::{Parser, ParserError, lexer::TokenKind},
     printer::{PrettyPrint, PrettyPrinter, Print, PrintOptions},
-    term::{self, Expand, Normalize, Term, TermSet, Unify, Value},
+    term::{self, Term, TermSet, Value},
 };
 
 /// An enum representing elements inside a vector space.
@@ -23,9 +23,9 @@ pub enum VectorSpaceElement<T: Set, Vector> {
     Vector(Vector),
 }
 
-impl<T: Ring> VectorSpaceElement<TermSet<T>, Matrix<TermSet<T>>> {
+impl<T: Ring> VectorSpaceElement<T, Matrix<T>> {
     /// Compute the determinant of self in set `T`.
-    pub fn det(&self) -> MatrixResult<Term<T>> {
+    pub fn det(&self) -> MatrixResult<T::Element> {
         match self {
             VectorSpaceElement::Scalar(scalar, _) => Ok(scalar.clone()),
             VectorSpaceElement::Vector(matrix) => matrix.det(),
@@ -86,7 +86,7 @@ impl<T> M<T> {
 }
 
 impl<T: Set> Set for M<T> {
-    type Element = VectorSpaceElement<TermSet<T>, Matrix<TermSet<T>>>;
+    type Element = VectorSpaceElement<T, Matrix<T>>;
 
     type ExponantSet = M<T::ExponantSet>;
     type ProductCoefficientSet = M<T::ProductCoefficientSet>;
@@ -103,9 +103,7 @@ impl<T: Set> Set for M<T> {
         f: &mut std::fmt::Formatter<'_>,
     ) -> std::fmt::Result {
         match elem {
-            VectorSpaceElement::Scalar(scalar, _) => {
-                self.scalar_sub_set.get_term_set().print(scalar, options, f)
-            }
+            VectorSpaceElement::Scalar(scalar, _) => self.scalar_sub_set.print(scalar, options, f),
             VectorSpaceElement::Vector(matrix) => Print::print(matrix, options, f),
         }
     }
@@ -115,17 +113,16 @@ impl<T: Set> Set for M<T> {
         options: &crate::printer::PrintOptions,
     ) -> crate::printer::PrettyPrinter {
         match elem {
-            VectorSpaceElement::Scalar(scalar, _) => self
-                .scalar_sub_set
-                .get_term_set()
-                .pretty_print(scalar, options),
+            VectorSpaceElement::Scalar(scalar, _) => {
+                self.scalar_sub_set.pretty_print(scalar, options)
+            }
             VectorSpaceElement::Vector(matrix) => PrettyPrint::pretty_print(matrix, options),
         }
     }
     fn parse_literal(&self, value: &str) -> Result<Self::Element, String> {
         Ok(VectorSpaceElement::Scalar(
-            self.scalar_sub_set.get_term_set().parse_literal(value)?,
-            self.scalar_sub_set.get_term_set(),
+            self.scalar_sub_set.parse_literal(value)?,
+            self.scalar_sub_set,
         ))
     }
     fn element_eq(&self, a: &Self::Element, b: &Self::Element) -> bool {
@@ -137,7 +134,7 @@ impl<T: PartiallyOrderedSet> PartiallyOrderedSet for M<T> {
     fn partial_cmp(&self, a: &Self::Element, b: &Self::Element) -> Option<Ordering> {
         match (a, b) {
             (VectorSpaceElement::Scalar(a, _), VectorSpaceElement::Scalar(b, _)) => {
-                self.scalar_sub_set.get_term_set().partial_cmp(a, b)
+                self.scalar_sub_set.partial_cmp(a, b)
             }
             _ => None,
         }
@@ -146,26 +143,17 @@ impl<T: PartiallyOrderedSet> PartiallyOrderedSet for M<T> {
 
 impl<T: Group> Group for M<T> {
     fn zero(&self) -> Self::Element {
-        VectorSpaceElement::Scalar(
-            self.scalar_sub_set.get_term_set().zero(),
-            self.scalar_sub_set.get_term_set(),
-        )
+        VectorSpaceElement::Scalar(self.scalar_sub_set.zero(), self.scalar_sub_set)
     }
 
     fn nth(&self, nth: i64) -> Self::Element {
-        VectorSpaceElement::Scalar(
-            self.scalar_sub_set.get_term_set().nth(nth),
-            self.scalar_sub_set.get_term_set(),
-        )
+        VectorSpaceElement::Scalar(self.scalar_sub_set.nth(nth), self.scalar_sub_set)
     }
 
     fn add(&self, a: &Self::Element, b: &Self::Element) -> Self::Element {
         match (a, b) {
             (VectorSpaceElement::Scalar(a, _), VectorSpaceElement::Scalar(b, _)) => {
-                VectorSpaceElement::Scalar(
-                    self.scalar_sub_set.get_term_set().add(a, b),
-                    self.scalar_sub_set.get_term_set(),
-                )
+                VectorSpaceElement::Scalar(self.scalar_sub_set.add(a, b), self.scalar_sub_set)
             }
             (VectorSpaceElement::Vector(a), VectorSpaceElement::Vector(b)) => {
                 VectorSpaceElement::Vector(a + b)
@@ -176,20 +164,16 @@ impl<T: Group> Group for M<T> {
 
     fn neg(&self, a: &Self::Element) -> Self::Element {
         match a {
-            VectorSpaceElement::Scalar(a, _) => VectorSpaceElement::Scalar(
-                self.scalar_sub_set.get_term_set().neg(a),
-                self.scalar_sub_set.get_term_set(),
-            ),
+            VectorSpaceElement::Scalar(a, _) => {
+                VectorSpaceElement::Scalar(self.scalar_sub_set.neg(a), self.scalar_sub_set)
+            }
             VectorSpaceElement::Vector(a) => VectorSpaceElement::Vector(-a),
         }
     }
 }
 impl<T: Ring> Ring for M<T> {
     fn one(&self) -> Self::Element {
-        VectorSpaceElement::Scalar(
-            self.scalar_sub_set.get_term_set().one(),
-            self.scalar_sub_set.get_term_set(),
-        )
+        VectorSpaceElement::Scalar(self.scalar_sub_set.one(), self.scalar_sub_set)
     }
     fn mul(&self, _a: &Self::Element, _b: &Self::Element) -> Self::Element {
         todo!()
@@ -199,9 +183,8 @@ impl<T: Ring> Ring for M<T> {
         match a {
             VectorSpaceElement::Scalar(scalar, _) => self
                 .scalar_sub_set
-                .get_term_set()
                 .try_inv(scalar)
-                .map(|elem| VectorSpaceElement::Scalar(elem, self.scalar_sub_set.get_term_set())),
+                .map(|elem| VectorSpaceElement::Scalar(elem, self.scalar_sub_set)),
             VectorSpaceElement::Vector(matrix) => matrix.inv().ok().map(VectorSpaceElement::Vector),
         }
     }
@@ -211,7 +194,8 @@ impl<T: Ring> Ring for M<T> {
             VectorSpaceElement::Vector(matrix) => {
                 let mut res = matrix.clone();
                 res.data.iter_mut().for_each(|x| {
-                    *x = x.unify();
+                    todo!()
+                    // *x = x.unify();
                 });
                 VectorSpaceElement::Vector(res)
             }
@@ -231,17 +215,18 @@ impl<T: Ring> Ring for M<T> {
                 ..
             }) = **pow.exponant
         {
-            Term::Value(term::Value::new(
-                VectorSpaceElement::Scalar(
-                    Term::Pow(term::Pow::new(
-                        base.clone(),
-                        exponant.clone(),
-                        self.scalar_sub_set,
-                    )),
-                    self.scalar_sub_set.get_term_set(),
-                ),
-                *self,
-            ))
+            todo!()
+            // Term::Value(term::Value::new(
+            //     VectorSpaceElement::Scalar(
+            //         Term::Pow(term::Pow::new(
+            //             base.clone(),
+            //             exponant.clone(),
+            //             self.scalar_sub_set,
+            //         )),
+            //         self.scalar_sub_set.get_term_set(),
+            //     ),
+            //     *self,
+            // ))
         } else {
             a
         };
@@ -249,17 +234,29 @@ impl<T: Ring> Ring for M<T> {
             Term::Value(value) => match &value.value {
                 VectorSpaceElement::Vector(matrix) => {
                     let mut res = matrix.clone();
-                    res.data.iter_mut().for_each(|x| *x = x.normalize());
+                    res.data.iter_mut().for_each(|x| *x = self
+                            .scalar_sub_set
+                            .normalize(Term::Value(Value::new(x.clone(), self.scalar_sub_set)))
+                            .as_value()
+                            .expect("Normalized expression is not a value and should be converted inside the matrix ring")
+                            .value);
                     return Term::Value(Value::new(VectorSpaceElement::Vector(res), *self));
                 }
                 VectorSpaceElement::Scalar(scalar, _) => {
-                    return Term::Value(Value::new(
-                        VectorSpaceElement::Scalar(
-                            scalar.normalize(),
-                            self.scalar_sub_set.get_term_set(),
+                    let expanded = self
+                        .scalar_sub_set
+                        .normalize(Term::Value(Value::new(scalar.clone(), self.scalar_sub_set)));
+                    match expanded {
+                        Term::Value(Value { value, .. }) => {
+                            return Term::Value(Value::new(
+                                VectorSpaceElement::Scalar(value, self.scalar_sub_set),
+                                *self,
+                            ));
+                        }
+                        _ => unimplemented!(
+                            "Normalized expression is not a value and should be converted inside the matrix ring"
                         ),
-                        *self,
-                    ));
+                    }
                 }
             },
             Term::Pow(term::Pow { base, exponant, .. }) => {
@@ -302,14 +299,29 @@ impl<T: Ring> Ring for M<T> {
                 VectorSpaceElement::Vector(matrix) => {
                     let mut res = matrix.clone();
                     res.data.iter_mut().for_each(|x| {
-                        *x = x.expand();
+                        *x = self
+                            .scalar_sub_set
+                            .expand(Term::Value(Value::new(x.clone(), self.scalar_sub_set)))
+                            .as_value()
+                            .expect("Expanded expression is not a value and should be converted inside the matrix ring")
+                            .value;
                     });
                     Term::Value(Value::new(VectorSpaceElement::Vector(res), *self))
                 }
-                VectorSpaceElement::Scalar(scalar, _) => Term::Value(Value::new(
-                    VectorSpaceElement::Scalar(scalar.expand(), self.scalar_sub_set.get_term_set()),
-                    *self,
-                )),
+                VectorSpaceElement::Scalar(scalar, _) => {
+                    let expanded = self
+                        .scalar_sub_set
+                        .expand(Term::Value(Value::new(scalar.clone(), self.scalar_sub_set)));
+                    match expanded {
+                        Term::Value(Value { value, .. }) => Term::Value(Value::new(
+                            VectorSpaceElement::Scalar(value, self.scalar_sub_set),
+                            *self,
+                        )),
+                        _ => unimplemented!(
+                            "Expanded expression is not a value and should be converted inside the matrix ring"
+                        ),
+                    }
+                }
             },
             _ => a,
         }
@@ -321,17 +333,29 @@ impl<T: Ring> Ring for M<T> {
                 VectorSpaceElement::Vector(matrix) => {
                     let mut res = matrix.clone();
                     res.data.iter_mut().for_each(|x| {
-                        *x = x.simplify();
+                        *x = self
+                            .scalar_sub_set
+                            .simplify(Term::Value(Value::new(x.clone(), self.scalar_sub_set)))
+                            .as_value()
+                            .expect("Simplified expression is not a value and should be converted inside the matrix ring")
+                            .value;
                     });
                     Term::Value(Value::new(VectorSpaceElement::Vector(res), *self))
                 }
-                VectorSpaceElement::Scalar(scalar, _) => Term::Value(Value::new(
-                    VectorSpaceElement::Scalar(
-                        scalar.simplify(),
-                        self.scalar_sub_set.get_term_set(),
-                    ),
-                    *self,
-                )),
+                VectorSpaceElement::Scalar(scalar, _) => {
+                    let expanded = self
+                        .scalar_sub_set
+                        .simplify(Term::Value(Value::new(scalar.clone(), self.scalar_sub_set)));
+                    match expanded {
+                        Term::Value(Value { value, .. }) => Term::Value(Value::new(
+                            VectorSpaceElement::Scalar(value, self.scalar_sub_set),
+                            *self,
+                        )),
+                        _ => unimplemented!(
+                            "Simplified expression is not a value and should be converted inside the matrix ring"
+                        ),
+                    }
+                }
             },
             _ => a,
         }
@@ -350,14 +374,11 @@ impl<T: Set, N> SetParseExpression<N> for M<T> {
 
                     let mut line_size = 0;
                     loop {
-                        lines.push(
-                            ParserTraitBounded::<T, N>::parse_expression_bounded(
-                                parser,
-                                0,
-                                self.scalar_sub_set,
-                            )?
-                            .unwrap(),
-                        );
+                        if let Some(element) = parser.parse_literal(self.scalar_sub_set)? {
+                            lines.push(element);
+                        } else {
+                            return Ok(None);
+                        }
                         line_size += 1;
 
                         if parser.token.kind != TokenKind::Comma {
@@ -387,7 +408,7 @@ impl<T: Set, N> SetParseExpression<N> for M<T> {
                     VectorSpaceElement::Vector(Matrix::new(
                         (lines.len() / size.unwrap(), size.unwrap()),
                         lines,
-                        self.scalar_sub_set.get_term_set(),
+                        self.scalar_sub_set,
                     )),
                     *self,
                 ))))
@@ -398,4 +419,6 @@ impl<T: Set, N> SetParseExpression<N> for M<T> {
 }
 
 /// The matrix field, with real coefficients. See [const@R]
-pub const M: M<R<Rational>> = M { scalar_sub_set: R };
+pub const M: M<TermSet<R<Rational>>> = M {
+    scalar_sub_set: TermSet::new(R),
+};

@@ -10,7 +10,7 @@ use std::ops::{Range, Sub};
 use crate::context::{Context, Symbol};
 use crate::field::matrix::M;
 use crate::field::{Group, Ring, Set, SetParseExpression};
-use crate::term::{Fun, Mul, Normalize, SymbolTerm, Term, Value};
+use crate::term::{Fun, Mul, Normalize, SymbolTerm, Term, TermSet, Value};
 
 use lexer::{Lexer, Token, TokenKind};
 use typenum::{Diff, U1, U10};
@@ -233,7 +233,9 @@ where
                     let arg_set = match symbol.symbol {
                         Context::DET => Term::Fun(Box::new(Fun::new(
                             symbol.symbol,
-                            self.parse_args::<M<E>, Diff<N, U1>>(set.get_matrix_set())?,
+                            self.parse_args::<M<TermSet<E>>, Diff<N, U1>>(
+                                set.get_term_set().get_matrix_set(),
+                            )?,
                             set,
                         ))),
                         _ => Term::Fun(Box::new(Fun::new(
@@ -345,7 +347,7 @@ impl Parser<'_> {
             .parse_literal(set)?
             .map(|lit| Term::Value(Value::new(lit, set))))
     }
-    fn parse_literal<E: Set>(&mut self, set: E) -> Result<Option<E::Element>, ParserError> {
+    pub fn parse_literal<E: Set>(&mut self, set: E) -> Result<Option<E::Element>, ParserError> {
         let content = &self.input[self.span()];
         match &self.token.kind {
             TokenKind::Literal { .. } => {

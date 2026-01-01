@@ -14,9 +14,11 @@ use malachite::{
 use crate::{
     combinatorics,
     context::{Context, Symbol},
-    field::{Derivable, Field, Group, PartiallyOrderedSet, Ring, Set, SetParseExpression, matrix::M},
+    field::{
+        Derivable, Field, Group, PartiallyOrderedSet, Ring, Set, SetParseExpression, matrix::M,
+    },
     printer::PrettyPrinter,
-    term::{self, Fun, Mul, Normalize, Term, Value},
+    term::{self, Fun, Mul, Normalize, Term, TermSet, Value},
 };
 
 /// The real field `{$RR$}`.
@@ -205,7 +207,7 @@ impl Ring for R<Rational> {
                     }
                 }
                 Context::DET => {
-                    if let Some(Term::Value(matrix)) = fun.get_arg::<M<Self>>()
+                    if let Some(Term::Value(matrix)) = fun.get_arg::<M<TermSet<Self>>>()
                         && let Ok(res) = matrix.value.det()
                     {
                         return res;

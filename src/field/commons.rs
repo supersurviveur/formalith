@@ -37,7 +37,7 @@ impl fmt::Display for TryCastError {
 impl<T: Set> TryElementFrom<M<T>> for TermSet<T> {
     fn try_from_element(value: <M<T> as Set>::Element) -> Result<Self::Element, TryCastError> {
         match value {
-            VectorSpaceElement::Scalar(scalar, _) => Ok(scalar),
+            VectorSpaceElement::Scalar(scalar, set) => Ok(Term::Value(Value::new(scalar, set))),
             VectorSpaceElement::Vector(_) => Err(TryCastError("Can't cast matrix to scalar")),
         }
     }
