@@ -4,6 +4,7 @@ use std::{cmp::Ordering, fmt, hash::Hash};
 
 use crate::{
     context::Symbol,
+    field::{integer::Z, matrix::M},
     parser::{Parser, ParserError},
     printer::{PrettyPrinter, PrintOptions},
     term::{Add, Mul, Pow, SymbolTerm, Term, TermSet, Value},
@@ -13,18 +14,17 @@ use crate::{
 pub mod commons;
 pub use commons::*;
 use malachite::Integer;
-use typenum::{U0, U1, U2, U3, U4, U5, U6, U7, U8, U9, U10};
 
 /// A set.
 pub trait Set: Clone + Copy + fmt::Debug + PartialEq + Eq + Hash + 'static {
     /// The type of the elements living in this set
     type Element: Clone + fmt::Debug + PartialEq + Eq + Hash;
 
-    /// The set where exponants live. Mostly [const@commons::Z], but it can be any group,
-    /// like [const@R] for real numbers since power is not only a notation for `x*x*...*x` but a defined operation.
+    /// The set where exponants live. Mostly [const@integer::Z], but it can be any group,
+    /// like [const@real::R] for real numbers since power is not only a notation for `x*x*...*x` but a defined operation.
     type ExponantSet: Group + OptionalDefault = Z<Integer>;
 
-    /// The set where coefficients in product live. Mostly [const@commons::Z], but it can be any ring.
+    /// The set where coefficients in product live. Mostly [const@integer::Z], but it can be any ring.
     type ProductCoefficientSet: Ring + OptionalDefault = Z<Integer>;
 
     /// Get the exponant set for this set
@@ -57,7 +57,13 @@ pub trait Set: Clone + Copy + fmt::Debug + PartialEq + Eq + Hash + 'static {
         TermSet::new(*self)
     }
 
-    /// Compares two elements of this group if possible, returns `None` otherwise
+    /// Compares two elements of this set and returns true if they are equals.
+    fn element_eq(&self, a: &Self::Element, b: &Self::Element) -> bool;
+}
+
+/// A set with a partial ordering.
+pub trait PartiallyOrderedSet: Set {
+    /// Compares two elements of this set if possible, returns `None` otherwise
     fn partial_cmp(&self, a: &Self::Element, b: &Self::Element) -> Option<Ordering>;
 }
 
@@ -65,7 +71,7 @@ pub trait Set: Clone + Copy + fmt::Debug + PartialEq + Eq + Hash + 'static {
 /// - `+` is associative
 /// - `*` has an identity element `zero`
 /// - Every element has an inverse element
-pub trait Group: Set {
+pub trait Group: PartiallyOrderedSet {
     /// Get the zero (aka identity element for `+`) of this group
     fn zero(&self) -> Self::Element;
     /// Check if a number is zero.
@@ -128,12 +134,6 @@ pub trait Group: Set {
 pub trait SetBound: Set<ExponantSet: Set<ExponantSet = Self::ExponantSet>> {}
 impl<T: Set<ExponantSet: Set<ExponantSet = Self::ExponantSet>>> SetBound for T {}
 
-/// Same as [GroupBound] for [Ring] trait.
-///
-/// Auto implemented.
-pub trait RingBound: Ring<ExponantSet: Ring> + SetBound {}
-impl<T: Ring<ExponantSet: Ring> + SetBound> RingBound for T {}
-
 /// Trait to cast an element from a set to another set.
 pub trait TryElementFrom<T: Set>: Set {
     /// Try to convert an element of the set T into an element of the set E.
@@ -177,17 +177,17 @@ pub trait Ring: Group {
         (a.clone(), self.one())
     }
 
-    /// Normalize a mathematical expression using rules specific to this group. Check [commons::R::normalize]
+    /// Normalize a mathematical expression using rules specific to this group. Check [real::R::normalize]
     fn normalize(&self, a: Term<Self>) -> Term<Self> {
         a
     }
 
-    /// Expand a mathematical expression using rules specific to this group. Check [commons::M::expand]
+    /// Expand a mathematical expression using rules specific to this group. Check [M::expand]
     fn expand(&self, a: Term<Self>) -> Term<Self> {
         a
     }
 
-    /// Simplify a mathematical expression using rules specific to this group. Check [commons::M::simplify]
+    /// Simplify a mathematical expression using rules specific to this group. Check [M::simplify]
     fn simplify(&self, a: Term<Self>) -> Term<Self> {
         a
     }
@@ -195,65 +195,13 @@ pub trait Ring: Group {
 
 /// Parsing methods trait. The generic `N` represents the current recursion depth using the `typenum` crate.
 pub trait SetParseExpression<N>: Set {
-    /// Custom parsing function, to parse element specific to this group. Check [commons::M::parse_expression] for example.
+    /// Custom parsing function, to parse element specific to this group. Check [M::parse_expression] for example.
     fn parse_expression<'a>(
         &self,
         _parser: &mut Parser<'a>,
     ) -> Result<Option<Term<Self>>, ParserError> {
         Ok(None)
     }
-}
-
-/// [SetParseExpression] trait, enforcing `Self::ExponantSet` to also implements `SetParseExpression`
-pub trait SetParseExpressionExponent<N>:
-    SetParseExpression<N>
-    + Set<
-        ExponantSet: SetParseExpression<N> + Set<ProductCoefficientSet: SetParseExpression<N>>,
-        ProductCoefficientSet: SetParseExpression<N>,
-    >
-{
-}
-
-impl<
-    N,
-    T: SetParseExpression<N>
-        + Set<
-            ExponantSet: SetParseExpression<N> + Set<ProductCoefficientSet: SetParseExpression<N>>,
-            ProductCoefficientSet: SetParseExpression<N>,
-        >,
-> SetParseExpressionExponent<N> for T
-{
-}
-
-/// [SetParseExpressionExponent] trait, enforcing `SetParseExpressionExponent<N>` where `N` is between 0 and 10.
-pub trait SetParseExpressionBound:
-    SetParseExpressionExponent<U0>
-    + SetParseExpressionExponent<U1>
-    + SetParseExpressionExponent<U2>
-    + SetParseExpressionExponent<U3>
-    + SetParseExpressionExponent<U4>
-    + SetParseExpressionExponent<U5>
-    + SetParseExpressionExponent<U6>
-    + SetParseExpressionExponent<U7>
-    + SetParseExpressionExponent<U8>
-    + SetParseExpressionExponent<U9>
-    + SetParseExpressionExponent<U10>
-{
-}
-
-impl<T> SetParseExpressionBound for T where
-    T: SetParseExpressionExponent<U0>
-        + SetParseExpressionExponent<U1>
-        + SetParseExpressionExponent<U2>
-        + SetParseExpressionExponent<U3>
-        + SetParseExpressionExponent<U4>
-        + SetParseExpressionExponent<U5>
-        + SetParseExpressionExponent<U6>
-        + SetParseExpressionExponent<U7>
-        + SetParseExpressionExponent<U8>
-        + SetParseExpressionExponent<U9>
-        + SetParseExpressionExponent<U10>
-{
 }
 
 /// Trait to cast an expression from a set to another set.
@@ -340,4 +288,29 @@ pub trait Field: Ring {
 pub trait Derivable: Ring {
     /// TODO rework derivative system
     fn derivative(&self, expr: &Self::Element, x: Symbol) -> Self::Element;
+}
+
+/// Wrapper for an element living in a set. This wrapper implements all usefull traits like `Eq` or `Hash` using the implementation of the set itself.
+/// It's usefull for sets like `${ZZ/p ZZ}$`, where equality is not the equality on the integer type.
+#[derive(Eq)]
+pub struct SetElement<T: Set>(T, T::Element);
+
+impl<T: Set> Hash for SetElement<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+        self.1.hash(state);
+    }
+}
+
+impl<T: Set> PartialEq for SetElement<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0 && self.0.element_eq(&self.1, &other.1)
+    }
+}
+
+impl<T: Set> SetElement<T> {
+    /// Wrap an element in a set.
+    pub fn new(set: T, value: T::Element) -> Self {
+        Self(set, value)
+    }
 }

@@ -165,10 +165,7 @@ where
         res
     }
 }
-impl<T: Ring> ToTerm<T> for MultivariatePolynomial<Term<T>, TermSet<T>, TermSet<T::ExponantSet>>
-where
-    <T as Set>::ExponantSet: Ring,
-{
+impl<T: Ring> ToTerm<T> for MultivariatePolynomial<Term<T>, TermSet<T>, TermSet<T::ExponantSet>> {
     fn to_term(&self) -> Term<T> {
         let mut res = Term::zero(*self.set.get_set());
         for monomial in &self.terms {
@@ -602,7 +599,7 @@ where
     }
 }
 
-impl<V: Monomial + Print, T: Ring, U: Set> Print for MultivariatePolynomial<V, T, U> {
+impl<V: Monomial, T: Ring, U: Set> Print for MultivariatePolynomial<V, T, U> {
     fn print(&self, options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (j, (vars, coeff)) in self.terms.iter().enumerate() {
             let has_coeff = !self.set.is_one(coeff) || vars.is_empty();
@@ -650,7 +647,7 @@ impl<V: Monomial, T: Ring, U: Ring> PrettyPrint for MultivariatePolynomial<V, T,
     }
 }
 
-impl<V: Monomial + PrettyPrint, T: Ring, U: Ring> Display for MultivariatePolynomial<V, T, U> {
+impl<V: Monomial, T: Ring, U: Ring> Display for MultivariatePolynomial<V, T, U> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         PrettyPrint::fmt(self, &PrintOptions::default(), f)
     }

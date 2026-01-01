@@ -9,8 +9,11 @@ use std::{
 
 use crate::{
     context::{Context, Symbol},
-    field::{Group, M, Ring, RingBound, Set, TryElementFrom, VectorSpaceElement},
-    matrix::{Matrix, MatrixResult},
+    field::{
+        Group, PartiallyOrderedSet, Ring, Set, TryElementFrom,
+        matrix::{M, VectorSpaceElement},
+    },
+    matrix::MatrixResult,
     polynom::{MultivariatePolynomial, ToTerm},
     printer::{PrettyPrint, PrettyPrinter, Print, PrintOptions},
 };
@@ -50,7 +53,7 @@ pub enum Term<T: Set> {
     Fun(Box<dyn Function<T>>),
 }
 
-impl<T: Set> std::cmp::PartialOrd for Term<T> {
+impl<T: PartiallyOrderedSet> std::cmp::PartialOrd for Term<T> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match (self, other) {
             (Term::Value(Value { value: v1, .. }), Term::Value(Value { value: v2, .. })) => {
@@ -331,10 +334,7 @@ impl<T: Group> Term<T> {
     }
 }
 
-impl<T: RingBound> Term<M<T>>
-where
-    M<T>: RingBound<Element = VectorSpaceElement<TermSet<T>, Matrix<TermSet<T>>>>,
-{
+impl<T: Ring> Term<M<T>> {
     /// Compute the determinant of the expression.
     pub fn det(&self) -> MatrixResult<Term<T>> {
         match self {
@@ -462,7 +462,7 @@ impl<T: Group> MergeTerms for Term<T> {
                         .get_coefficient_set()
                         .add(&m1.get_coeff(), &m2.get_coeff()),
                 );
-                *self = (*self).normalize();
+                *self = self.normalize();
                 true
             }
             (Term::Mul(m1), _) => {
@@ -518,8 +518,8 @@ impl<T: Set> MergeFactors for Term<T> {
     }
 }
 
-impl<T: RingBound> MergeFactors for Term<T> {
-    fn merge_factors(&mut self, other: &Self) -> bool {
+impl<T: Ring> Term<T> {
+    fn merge_factors_in_ring(&mut self, other: &Self) -> bool {
         match (self.borrow_mut(), other) {
             (
                 Term::Value(Value {
@@ -545,62 +545,6 @@ impl<T: RingBound> MergeFactors for Term<T> {
                     return true;
                 }
             }
-            (Term::Pow(p1), _) => {
-                // Merge x^2 * x
-                if *p1.base != *other {
-                    return false;
-                } else if let Term::Value(Value { value, set, .. }) = &mut **p1.exponant {
-                    // Add one to m1 coeff
-                    set.add_assign(value, &set.one());
-                    return true;
-                } else {
-                    **p1.exponant = Term::Add(Add::new(
-                        vec![
-                            (**p1.exponant).clone(),
-                            Value::new(
-                                other.get_set().get_exponant_set().one(),
-                                other.get_set().get_exponant_set(),
-                            )
-                            .into(),
-                        ],
-                        other.get_set().get_exponant_set(),
-                    ));
-                    **p1.exponant = (**p1.exponant).normalize();
-                    return true;
-                }
-            }
-            (_, Term::Pow(p2)) => {
-                // Merge x * x^2
-                if *self != *p2.base {
-                    return false;
-                } else if let Term::Value(Value { value, set, .. }) = &**p2.exponant {
-                    // Transform self to mul and add one to coeff
-                    self.convert_to_pow(
-                        p2.base.clone(),
-                        Term::Value(Value::new(set.add(value, &set.one()), *set)).into(),
-                    );
-                    return true;
-                } else {
-                    // Add one to the coefficient
-                    self.convert_to_pow(
-                        p2.base.clone(),
-                        Term::Add(Add::new(
-                            vec![
-                                (**p2.exponant).clone(),
-                                Value::new(
-                                    self.get_set().get_exponant_set().one(),
-                                    self.get_set().get_exponant_set(),
-                                )
-                                .into(),
-                            ],
-                            self.get_set().get_exponant_set(),
-                        ))
-                        .into(),
-                    );
-                    *self = (*self).normalize();
-                    return true;
-                }
-            }
             _ => {}
         }
 
@@ -621,7 +565,80 @@ impl<T: RingBound> MergeFactors for Term<T> {
     }
 }
 
-impl<T: RingBound> Term<T> {
+impl<T: Ring> MergeFactors for Term<T> {
+    default fn merge_factors(&mut self, other: &Self) -> bool {
+        self.merge_factors_in_ring(other)
+    }
+}
+impl<T: Ring<ExponantSet: Ring>> MergeFactors for Term<T> {
+    fn merge_factors(&mut self, other: &Self) -> bool {
+        if !self.merge_factors_in_ring(other) {
+            match (self.borrow_mut(), other) {
+                (Term::Pow(p1), _) => {
+                    // Merge x^2 * x
+                    if *p1.base != *other {
+                        false
+                    } else if let Term::Value(Value { value, set, .. }) = &mut **p1.exponant {
+                        // Add one to m1 coeff
+                        set.add_assign(value, &set.one());
+                        true
+                    } else {
+                        **p1.exponant = Term::Add(Add::new(
+                            vec![
+                                (**p1.exponant).clone(),
+                                Value::new(
+                                    other.get_set().get_exponant_set().one(),
+                                    other.get_set().get_exponant_set(),
+                                )
+                                .into(),
+                            ],
+                            other.get_set().get_exponant_set(),
+                        ));
+                        **p1.exponant = (**p1.exponant).normalize();
+                        true
+                    }
+                }
+                (_, Term::Pow(p2)) => {
+                    // Merge x * x^2
+                    if *self != *p2.base {
+                        false
+                    } else if let Term::Value(Value { value, set, .. }) = &**p2.exponant {
+                        // Transform self to mul and add one to coeff
+                        self.convert_to_pow(
+                            p2.base.clone(),
+                            Term::Value(Value::new(set.add(value, &set.one()), *set)).into(),
+                        );
+                        true
+                    } else {
+                        // Add one to the coefficient
+                        self.convert_to_pow(
+                            p2.base.clone(),
+                            Term::Add(Add::new(
+                                vec![
+                                    (**p2.exponant).clone(),
+                                    Value::new(
+                                        self.get_set().get_exponant_set().one(),
+                                        self.get_set().get_exponant_set(),
+                                    )
+                                    .into(),
+                                ],
+                                self.get_set().get_exponant_set(),
+                            ))
+                            .into(),
+                        );
+                        *self = self.normalize();
+                        true
+                    }
+                }
+                _ => false,
+            }
+        } else {
+            true
+        }
+    }
+}
+
+impl<T: Ring<ExponantSet: Ring>> Term<T> {
     /// Convert the expression to a multivariate polynomial.
     ///
     /// Used to use factorization algorithms.
@@ -776,11 +793,10 @@ impl<T: Ring> Expand for Term<T> {
     }
 }
 
-impl<T: RingBound> Term<T> {
+impl<T: Ring<ExponantSet: Ring>> Term<T> {
     /// Factor the expression.
     pub fn factor(&self) -> Self
     where
-        TermSet<T>: Ring,
         TermSet<T>: TryElementFrom<TermSet<T::ExponantSet>>,
         Term<T>: TryFrom<Term<T::ExponantSet>>,
         <Term<T> as TryFrom<Term<T::ExponantSet>>>::Error: Debug,

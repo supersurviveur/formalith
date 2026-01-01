@@ -2,13 +2,10 @@
 
 use std::cmp::Ordering;
 
-use malachite::Integer;
-
 use crate::{
-    field::{Field, Group, Ring, Set, Z},
+    field::{Field, Group, PartiallyOrderedSet, Ring, Set},
     printer::{PrettyPrint, Print},
     term::{Normalize, flags::Flags},
-    traits::optional_default::OptionalDefault,
 };
 
 use super::{Term, Value};
@@ -32,15 +29,16 @@ impl<T> TermSet<T> {
 impl<T: Set> Set for TermSet<T> {
     type Element = Term<T>;
 
-    default type ExponantSet = Z<Integer>;
+    type ExponantSet = TermSet<T::ExponantSet>;
 
-    default type ProductCoefficientSet = Z<Integer>;
+    type ProductCoefficientSet = TermSet<T::ProductCoefficientSet>;
 
-    default fn get_exponant_set(&self) -> Self::ExponantSet {
-        Self::ExponantSet::optional_default().unwrap()
+    fn get_exponant_set(&self) -> Self::ExponantSet {
+        self.get_set().get_exponant_set().get_term_set()
     }
-    default fn get_coefficient_set(&self) -> Self::ProductCoefficientSet {
-        Self::ProductCoefficientSet::optional_default().unwrap()
+
+    fn get_coefficient_set(&self) -> Self::ProductCoefficientSet {
+        self.get_set().get_coefficient_set().get_term_set()
     }
 
     fn print(
@@ -59,26 +57,22 @@ impl<T: Set> Set for TermSet<T> {
     ) -> crate::printer::PrettyPrinter {
         PrettyPrint::pretty_print(elem, options)
     }
+
     fn parse_literal(&self, value: &str) -> Result<Self::Element, String> {
         Ok(Term::Value(Value::new(
             self.0.parse_literal(value)?,
             *self.get_set(),
         )))
     }
-    fn partial_cmp(&self, a: &Self::Element, b: &Self::Element) -> Option<Ordering> {
-        PartialOrd::partial_cmp(a, b)
+
+    fn element_eq(&self, a: &Self::Element, b: &Self::Element) -> bool {
+        a == b
     }
 }
-impl<T: Ring> Set for TermSet<T> {
-    type ExponantSet = Self;
 
-    type ProductCoefficientSet = Self;
-
-    fn get_exponant_set(&self) -> Self::ExponantSet {
-        *self
-    }
-    fn get_coefficient_set(&self) -> Self::ProductCoefficientSet {
-        *self
+impl<T: PartiallyOrderedSet> PartiallyOrderedSet for TermSet<T> {
+    fn partial_cmp(&self, a: &Self::Element, b: &Self::Element) -> Option<Ordering> {
+        PartialOrd::partial_cmp(a, b)
     }
 }
 
@@ -118,4 +112,4 @@ impl<T: Ring> Ring for TermSet<T> {
     }
 }
 
-impl<T: Field + Ring> Field for TermSet<T> {}
+impl<T: Field> Field for TermSet<T> {}

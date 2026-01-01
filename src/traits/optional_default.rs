@@ -3,7 +3,7 @@
 use malachite::{Integer, Rational};
 
 use crate::{
-    field::{M, R, Z},
+    field::{integer::Z, matrix::M, real::R},
     term::TermSet,
 };
 

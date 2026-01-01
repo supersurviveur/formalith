@@ -1,7 +1,7 @@
 #![allow(unused)]
 
 use formalith::{
-    field::{M, R},
+    field::{matrix::M, real::R},
     parse,
     polynom::MultivariatePolynomial,
     symbol,
