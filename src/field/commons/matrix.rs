@@ -169,8 +169,23 @@ impl<T: Ring> Ring for M<T> {
     fn one(&self) -> Self::Element {
         VectorSpaceElement::Scalar(self.scalar_sub_set.one(), self.scalar_sub_set)
     }
-    fn mul(&self, _a: &Self::Element, _b: &Self::Element) -> Self::Element {
-        todo!()
+    fn mul(&self, a: &Self::Element, b: &Self::Element) -> Self::Element {
+        match (a, b) {
+            (VectorSpaceElement::Scalar(a, _), VectorSpaceElement::Scalar(b, _)) => {
+                VectorSpaceElement::Scalar(self.scalar_sub_set.mul(a, b), self.scalar_sub_set)
+            }
+            (VectorSpaceElement::Vector(a), VectorSpaceElement::Vector(b)) => {
+                VectorSpaceElement::Vector(a * b)
+            }
+            (VectorSpaceElement::Scalar(a, _), VectorSpaceElement::Vector(b))
+            | (VectorSpaceElement::Vector(b), VectorSpaceElement::Scalar(a, _)) => {
+                VectorSpaceElement::Vector({
+                    let mut b = b.clone();
+                    b.external_product(a);
+                    b
+                })
+            }
+        }
     }
 
     fn try_inv(&self, a: &Self::Element) -> Option<Self::Element> {

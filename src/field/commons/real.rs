@@ -258,14 +258,20 @@ impl Ring for R<Rational> {
                         }
                     }
                 } else if let (Term::Mul(mul), _) = (&**base, &**exponant) {
-                    return Mul::new(
-                        mul.coefficient.clone(),
+                    return Term::Mul(Mul::new(
+                        self.get_coefficient_set().nth(1),
                         mul.into_iter()
                             .map(|x| term::Pow::new(x.clone(), (**exponant).clone(), *self).into())
+                            .chain([term::Pow::new(
+                                Term::Value(Value::new(mul.coefficient.clone(), *self)),
+                                (**exponant).clone(),
+                                *self,
+                            )
+                            .into()])
                             .collect(),
                         *self,
-                    )
-                    .into();
+                    ))
+                    .normalize();
                 }
                 a
             }

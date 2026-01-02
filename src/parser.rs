@@ -234,7 +234,7 @@ where
 
         match (node, node_in_coefficient_set) {
             (None, Err(_)) | (None, Ok(None)) => Ok(None),
-            (Some(mut node), node_in_coefficient_set) => {
+            (Some(mut node), mut node_in_coefficient_set) => {
                 if let (TokenKind::OpenParen, Term::Symbol(symbol)) = (&self.token.kind, &node) {
                     self.next_token();
                     let arg_set = match symbol.symbol {
@@ -266,6 +266,11 @@ where
                         op.unwrap(),
                         set,
                     )?;
+                    if node_in_coefficient_set.is_ok() {
+                        node_in_coefficient_set = Err(ParserError::new(
+                            "node_in_coefficient_set is already used".to_string(),
+                        ))
+                    }
                     node = new_node;
                     if !parsed {
                         break;
@@ -394,6 +399,10 @@ impl<E: Set, N> ParseUnary<E, N> for Parser<'_> {
 impl<E: Group, N> ParseUnary<E, N> for Parser<'_> {
     fn parse_unary(&mut self, priority: usize, set: E) -> Result<Option<Term<E>>, ParserError> {
         match self.get_op() {
+            Some(Op::Add) => {
+                self.next_token();
+                ParserTraitBounded::<E, N>::parse_expression_bounded(self, priority, set)
+            }
             Some(Op::Substract) => {
                 self.next_token();
                 Ok(

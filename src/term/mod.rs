@@ -290,7 +290,7 @@ impl<T: Group> Term<T> {
                 Ordering::Equal
             }
             (Term::Mul(m1), v2) => {
-                if m1.len() != 2 {
+                if m1.len() - m1.has_coeff() as usize != 1 {
                     Ordering::Greater
                 } else {
                     // Compare the non-coefficient part
@@ -298,7 +298,7 @@ impl<T: Group> Term<T> {
                 }
             }
             (v1, Term::Mul(m2)) => {
-                if m2.len() != 2 {
+                if m2.len() - m2.has_coeff() as usize != 1 {
                     Ordering::Less
                 } else {
                     // Compare the non-coefficient part
@@ -474,7 +474,7 @@ impl<T: Group> MergeTerms for Term<T> {
             }
             (Term::Mul(m1), _) => {
                 // Merge 2*x + x
-                if m1.len() != 2 || m1.factors[0] != *other {
+                if m1.len() - m1.has_coeff() as usize != 1 || m1.factors[0] != *other {
                     false
                 } else {
                     let set = m1.set;
@@ -485,7 +485,7 @@ impl<T: Group> MergeTerms for Term<T> {
             }
             (_, Term::Mul(m2)) => {
                 // Merge x + 2*x
-                if m2.len() != 2 || m2.factors[0] != *self {
+                if m2.len() - m2.has_coeff() as usize != 1 || m2.factors[0] != *self {
                     false
                 } else {
                     let set = m2.set;
@@ -588,6 +588,7 @@ impl<T: Ring<ExponantSet: Ring>> MergeFactors for Term<T> {
                     } else if let Term::Value(Value { value, set, .. }) = &mut **p1.exponant {
                         // Add one to m1 coeff
                         set.add_assign(value, &set.one());
+                        *self = self.normalize();
                         true
                     } else {
                         **p1.exponant = Term::Add(Add::new(
@@ -615,6 +616,7 @@ impl<T: Ring<ExponantSet: Ring>> MergeFactors for Term<T> {
                             p2.base.clone(),
                             Term::Value(Value::new(set.add(value, &set.one()), *set)).into(),
                         );
+                        *self = self.normalize();
                         true
                     } else {
                         // Add one to the coefficient
@@ -756,31 +758,31 @@ impl<T: Ring> Expand for Term<T> {
                                     mul.push(term.clone());
                                     new_sums.push(Term::Mul(mul));
                                 } else {
-                                    new_sums.push(Term::Mul(Mul::new(
-                                        sum.get_set().get_coefficient_set().nth(1),
-                                        vec![sum.clone(), term.clone()],
-                                        sum.get_set(),
-                                    )))
+                                    unreachable!()
                                 }
                             }
                             if sums.is_empty() {
-                                new_sums.push(term.clone());
+                                new_sums.push(Term::Mul(Mul::new(
+                                    mul.coefficient.clone(),
+                                    vec![term.clone()],
+                                    mul.set,
+                                )));
                             }
                         }
                         std::mem::swap(&mut sums, &mut new_sums);
                         new_sums.clear();
                     } else if sums.is_empty() {
-                        sums.push(expanded);
+                        sums.push(Term::Mul(Mul::new(
+                            mul.coefficient.clone(),
+                            vec![expanded],
+                            mul.set,
+                        )));
                     } else {
                         for sum in &mut sums {
                             if let Term::Mul(mul) = sum {
                                 mul.push(expanded.clone());
                             } else {
-                                *sum = Term::Mul(Mul::new(
-                                    sum.get_set().get_coefficient_set().nth(1),
-                                    vec![sum.clone(), expanded.clone()],
-                                    sum.get_set(),
-                                ))
+                                unreachable!()
                             }
                         }
                     }
@@ -905,14 +907,23 @@ impl<T: Ring> Term<T> {
                     }
                 }
                 if res.is_empty() {
-                    return Term::one(self.get_set());
+                    if mul.set.get_coefficient_set().is_one(&coeff) {
+                        return Term::one(self.get_set());
+                    } else {
+                        return Term::zero(self.get_set());
+                    }
                 }
                 res.sort_by(Term::<T>::cmp_factors);
                 res.reverse();
 
+                // if res.len() == 2 {
+                //     println!("{} {:?}", mul, res);
+                // }
+
                 // Merge factors
                 let mut factors = vec![];
                 let mut current_merge = res.pop().unwrap();
+
                 while let Some(next) = res.pop() {
                     if !current_merge.merge_factors(&next) {
                         if current_merge.is_zero() {
@@ -924,7 +935,9 @@ impl<T: Ring> Term<T> {
                 }
                 factors.push(current_merge);
 
-                if factors.len() == 1 && mul.set.get_coefficient_set().is_one(&coeff) {
+                if mul.set.get_coefficient_set().is_zero(&coeff) {
+                    Term::zero(self.get_set())
+                } else if factors.len() == 1 && mul.set.get_coefficient_set().is_one(&coeff) {
                     factors.pop().unwrap()
                 } else {
                     Term::Mul(Mul::new(coeff.clone(), factors, self.get_set()))
@@ -945,15 +958,8 @@ impl<T: Ring> Term<T> {
         res
     }
 }
-
-impl<T: Ring> Normalize for Term<T> {
-    default fn normalize(&self) -> Self {
-        self.normalize_in_ring()
-    }
-}
-
-impl<T: Ring<ExponantSet: Ring>> Normalize for Term<T> {
-    fn normalize(&self) -> Self {
+impl<T: Ring<ExponantSet: Ring>> Term<T> {
+    fn normalize_in_ring_with_ring_exponant(&self) -> Self {
         let normalized = self.normalize_in_ring();
         if let Term::Pow(pow) = &normalized
             && pow.exponant.is_one()
@@ -964,10 +970,45 @@ impl<T: Ring<ExponantSet: Ring>> Normalize for Term<T> {
     }
 }
 
+impl<T: Ring> Normalize for Term<T> {
+    default fn normalize(&self) -> Self {
+        self.normalize_in_ring()
+    }
+}
+
+impl<T: Ring<ExponantSet: Ring>> Normalize for Term<T> {
+    default fn normalize(&self) -> Self {
+        self.normalize_in_ring_with_ring_exponant()
+    }
+}
+impl<T: Ring<ExponantSet: Ring, ProductCoefficientSet = T>> Normalize for Term<T> {
+    fn normalize(&self) -> Self {
+        if let Term::Mul(mut mul) = self.clone() {
+            let mut new_coeff = mul.coefficient.clone();
+            for factor in mul.iter() {
+                if let Term::Value(Value { value, .. }) = factor {
+                    mul.set
+                        .get_coefficient_set()
+                        .mul_assign(&mut new_coeff, value);
+                }
+            }
+            mul.coefficient = new_coeff;
+            mul.factors.retain(|elem| !matches!(elem, Term::Value(_)));
+            if mul.is_empty() {
+                Term::Value(Value::new(mul.coefficient, self.get_set()))
+            } else {
+                Term::Mul(mul).normalize_in_ring_with_ring_exponant()
+            }
+        } else {
+            self.normalize_in_ring_with_ring_exponant()
+        }
+    }
+}
+
 impl<T: Ring> Term<T> {
     /// Return the expression as a rational expression, (numerator, denominator)
     pub fn as_fraction(&self, unify: bool) -> (Self, Self) {
-        debug_assert!(!self.needs_normalization(), "{self}");
+        debug_assert!(!self.needs_normalization());
         match self {
             Term::Symbol(_) | Term::Fun(_) => (self.clone(), Term::one(self.get_set())),
             Term::Value(value) => {
@@ -985,6 +1026,21 @@ impl<T: Ring> Term<T> {
                     let (n, d) = factor.as_fraction(unify);
                     num *= n;
                     den *= d;
+                }
+                let (n, d) = mul.set.get_coefficient_set().as_fraction(&mul.coefficient);
+                if let Term::Mul(mul) = &mut num {
+                    mul.set
+                        .get_coefficient_set()
+                        .mul_assign(&mut mul.coefficient, &n);
+                } else {
+                    num = Term::Mul(Mul::new(n, vec![num], mul.set)).normalize()
+                }
+                if let Term::Mul(mul) = &mut den {
+                    mul.set
+                        .get_coefficient_set()
+                        .mul_assign(&mut mul.coefficient, &d);
+                } else {
+                    den = Term::Mul(Mul::new(d, vec![den], mul.set)).normalize()
                 }
                 (num, den)
             }

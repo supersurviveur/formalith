@@ -116,6 +116,21 @@ impl<T: Group> std::ops::Neg for Matrix<T> {
     }
 }
 
+impl<T: Ring> std::ops::Mul for Matrix<T> {
+    type Output = Matrix<T>;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        &self * &rhs
+    }
+}
+impl<T: Ring> std::ops::Mul for &Matrix<T> {
+    type Output = Matrix<T>;
+
+    fn mul(self, _rhs: Self) -> Self::Output {
+        todo!()
+    }
+}
+
 impl<T: Set> PartialOrd for Matrix<T> {
     fn partial_cmp(&self, _: &Self) -> Option<std::cmp::Ordering> {
         // There is no order over matrix
@@ -355,6 +370,14 @@ impl<T: Ring> Matrix<T> {
             let tgt_idx = target_row * cols + col;
             let term = self.set.mul(&self.data[src_idx], factor);
             self.data[tgt_idx] = self.set.add(&self.data[tgt_idx], &term);
+        }
+    }
+
+    /// Scale the matrix by a factor
+    pub fn external_product(&mut self, factor: &T::Element) {
+        let rows = self.size.0;
+        for row in 0..rows {
+            self.scale_row(row, factor);
         }
     }
 }

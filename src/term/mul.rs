@@ -59,9 +59,9 @@ impl<T: Set> Mul<T> {
     pub fn is_empty(&self) -> bool {
         self.factors.is_empty()
     }
-    /// Get the number of terms in the sum.
+    /// Get the number of terms in the product.
     pub fn len(&self) -> usize {
-        self.factors.len() + 1
+        self.factors.len() + self.has_coeff() as usize
     }
     /// Add a factor at the end of the product, without normalizing it
     pub fn push(&mut self, value: Term<T>) {
@@ -128,7 +128,7 @@ impl<T: Set> Print for Mul<T> {
         }
         for (i, factor) in self.factors.iter().enumerate() {
             Self::group(factor, options, f)?;
-            if i != self.len() - 1 {
+            if i != self.len() - self.has_coeff() as usize {
                 Self::operator("*", options, f)?;
             }
         }
