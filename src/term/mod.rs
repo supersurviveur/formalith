@@ -449,19 +449,9 @@ impl<T: Group> MergeTerms for Term<T> {
                 if m1_len != m2_len {
                     return false;
                 }
-                // Compare non-coefficients factors
-                for (a, b) in m1.iter().zip(m2.iter()) {
-                    // Skip coefficients
-                    if let Term::Value(_) = a {
-                        break;
-                    }
-                    if let Term::Value(_) = b {
-                        break;
-                    }
-
-                    if a != b {
-                        return false;
-                    }
+                // Compare factors
+                if m1.factors != m2.factors {
+                    return false;
                 }
 
                 m1.set_coeff(
@@ -647,7 +637,7 @@ impl<T: Ring<ExponantSet: Ring>> MergeFactors for Term<T> {
     }
 }
 
-impl<T: Ring<ExponantSet: Ring>> Term<T> {
+impl<T: Ring<ExponantSet: Ring, ProductCoefficientSet = T>> Term<T> {
     /// Convert the expression to a multivariate polynomial.
     ///
     /// Used to use factorization algorithms.
@@ -696,7 +686,8 @@ impl<T: Ring<ExponantSet: Ring>> Term<T> {
                 res
             }
             Term::Mul(mul) => {
-                let mut res = MultivariatePolynomial::one(
+                let mut res = MultivariatePolynomial::constant(
+                    Term::Value(Value::new(mul.coefficient.clone(), self.get_set())),
                     self.get_set().get_term_set(),
                     self.get_set().get_exponant_set().get_term_set(),
                 );
@@ -802,7 +793,7 @@ impl<T: Ring> Expand for Term<T> {
     }
 }
 
-impl<T: Ring<ExponantSet: Ring>> Term<T> {
+impl<T: Ring<ExponantSet: Ring, ProductCoefficientSet = T>> Term<T> {
     /// Factor the expression.
     pub fn factor(&self) -> Self
     where
