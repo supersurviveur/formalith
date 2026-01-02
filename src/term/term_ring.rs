@@ -3,9 +3,10 @@
 use std::cmp::Ordering;
 
 use crate::{
-    field::{Field, Group, PartiallyOrderedSet, Ring, Set},
+    field::{Field, Group, PartiallyOrderedSet, Ring, Set, SetParseExpression, TryExprFrom},
+    parser::{Parser, ParserError, ParserTraitBounded},
     printer::{PrettyPrint, Print},
-    term::{Normalize, flags::Flags},
+    term::{Expand, Normalize, Unify, flags::Flags},
 };
 
 use super::{Term, Value};
@@ -58,13 +59,6 @@ impl<T: Set> Set for TermSet<T> {
         PrettyPrint::pretty_print(elem, options)
     }
 
-    fn parse_literal(&self, value: &str) -> Result<Self::Element, String> {
-        Ok(Term::Value(Value::new(
-            self.0.parse_literal(value)?,
-            *self.get_set(),
-        )))
-    }
-
     fn element_eq(&self, a: &Self::Element, b: &Self::Element) -> bool {
         a == b
     }
@@ -108,8 +102,39 @@ impl<T: Ring> Ring for TermSet<T> {
         Some(a.inv())
     }
     fn normalize(&self, a: Term<Self>) -> Term<Self> {
-        a.normalize()
+        let a = self.get_set().try_from_expr(a).unwrap();
+        Term::Value(Value::new(a.normalize(), *self))
+    }
+    fn simplify(&self, a: Term<Self>) -> Term<Self> {
+        let a = self.get_set().try_from_expr(a).unwrap();
+        Term::Value(Value::new(a.simplify(), *self))
+    }
+    fn expand(&self, a: Term<Self>) -> Term<Self> {
+        let a = self.get_set().try_from_expr(a).unwrap();
+        Term::Value(Value::new(a.expand(), *self))
+    }
+    fn as_fraction(&self, a: &Self::Element) -> (Self::Element, Self::Element) {
+        a.as_fraction(false)
+    }
+    fn unify(&self, a: &Self::Element) -> Self::Element {
+        a.unify()
     }
 }
 
 impl<T: Field> Field for TermSet<T> {}
+impl<T: Set, N> SetParseExpression<N> for TermSet<T> {
+    fn parse_expression(&self, parser: &mut Parser) -> Result<Option<Term<Self>>, ParserError> {
+        Ok(
+            ParserTraitBounded::<T, N>::parse_expression_bounded(parser, 0, *self.get_set())?
+                .map(|parsed| Term::Value(Value::new(parsed, *self))),
+        )
+    }
+
+    fn parse_literal<'a>(&self, parser: &mut Parser<'a>) -> Result<Option<Self::Element>, String> {
+        Ok(ParserTraitBounded::<T, N>::parse_expression_bounded(
+            parser,
+            0,
+            *self.get_set(),
+        )?)
+    }
+}

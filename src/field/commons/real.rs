@@ -17,6 +17,7 @@ use crate::{
     field::{
         Derivable, Field, Group, PartiallyOrderedSet, Ring, Set, SetParseExpression, matrix::M,
     },
+    parser::Parser,
     printer::PrettyPrinter,
     term::{self, Fun, Mul, Normalize, Term, TermSet, Value},
 };
@@ -65,11 +66,6 @@ impl Set for R<Rational> {
             num.vertical_concat("─", &den);
             num
         }
-    }
-    fn parse_literal(&self, value: &str) -> Result<Self::Element, String> {
-        Rational::from_sci_string(value).ok_or(format!(
-            "Failed to parse \"{value}\" to malachite::Rational",
-        ))
     }
     fn element_eq(&self, a: &Self::Element, b: &Self::Element) -> bool {
         a == b
@@ -278,7 +274,15 @@ impl Ring for R<Rational> {
     }
 }
 
-impl<N> SetParseExpression<N> for R<Rational> {}
+impl<N> SetParseExpression<N> for R<Rational> {
+    fn parse_literal(&self, parser: &mut Parser) -> Result<Option<Self::Element>, String> {
+        parser.is_literal_and(|value| {
+            Ok(Some(Rational::from_sci_string(value).ok_or(format!(
+                "Failed to parse \"{value}\" to malachite::Integer",
+            ))?))
+        })
+    }
+}
 
 impl Field for R<Rational> {}
 

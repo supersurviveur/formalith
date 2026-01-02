@@ -12,6 +12,7 @@ use malachite::{
 
 use crate::{
     field::{Group, PartiallyOrderedSet, Ring, Set, SetParseExpression},
+    parser::Parser,
     printer::PrettyPrinter,
 };
 
@@ -48,10 +49,7 @@ impl Set for Z<Integer> {
     ) -> crate::printer::PrettyPrinter {
         PrettyPrinter::from(format!("{elem}"))
     }
-    fn parse_literal(&self, value: &str) -> Result<Self::Element, String> {
-        Integer::from_sci_string(value)
-            .ok_or(format!("Failed to parse \"{value}\" to malachite::Integer",))
-    }
+
     fn element_eq(&self, a: &Self::Element, b: &Self::Element) -> bool {
         a == b
     }
@@ -100,7 +98,15 @@ impl Ring for Z<Integer> {
         }
     }
 }
-impl<N> SetParseExpression<N> for Z<Integer> {}
+impl<N> SetParseExpression<N> for Z<Integer> {
+    fn parse_literal(&self, parser: &mut Parser) -> Result<Option<Self::Element>, String> {
+        parser.is_literal_and(|value| {
+            Ok(Some(Integer::from_sci_string(value).ok_or(format!(
+                "Failed to parse \"{value}\" to malachite::Integer",
+            ))?))
+        })
+    }
+}
 
 /// The integer ring, using [malachite::Integer] as constant to get arbitrary precision integers.
 pub const Z: Z<Integer> = Z {

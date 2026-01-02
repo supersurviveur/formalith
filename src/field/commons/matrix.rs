@@ -119,12 +119,6 @@ impl<T: Set> Set for M<T> {
             VectorSpaceElement::Vector(matrix) => PrettyPrint::pretty_print(matrix, options),
         }
     }
-    fn parse_literal(&self, value: &str) -> Result<Self::Element, String> {
-        Ok(VectorSpaceElement::Scalar(
-            self.scalar_sub_set.parse_literal(value)?,
-            self.scalar_sub_set,
-        ))
-    }
     fn element_eq(&self, a: &Self::Element, b: &Self::Element) -> bool {
         a == b
     }
@@ -194,8 +188,12 @@ impl<T: Ring> Ring for M<T> {
             VectorSpaceElement::Vector(matrix) => {
                 let mut res = matrix.clone();
                 res.data.iter_mut().for_each(|x| {
-                    todo!()
-                    // *x = x.unify();
+                    *x = self
+                            .scalar_sub_set
+                            .normalize(Term::Value(Value::new(x.clone(), self.scalar_sub_set)))
+                            .as_value()
+                            .expect("Unified expression is not a value and should be converted inside the matrix ring")
+                            .value
                 });
                 VectorSpaceElement::Vector(res)
             }
@@ -215,18 +213,15 @@ impl<T: Ring> Ring for M<T> {
                 ..
             }) = **pow.exponant
         {
-            todo!()
-            // Term::Value(term::Value::new(
-            //     VectorSpaceElement::Scalar(
-            //         Term::Pow(term::Pow::new(
-            //             base.clone(),
-            //             exponant.clone(),
-            //             self.scalar_sub_set,
-            //         )),
-            //         self.scalar_sub_set.get_term_set(),
-            //     ),
-            //     *self,
-            // ))
+            Term::Value(Value::new(VectorSpaceElement::Scalar(self.scalar_sub_set.normalize(Term::Pow(term::Pow::new(
+                Term::Value(Value::new(base.clone(), self.scalar_sub_set)),
+                Term::Value(Value::new(
+                    exponant.clone(),
+                    self.scalar_sub_set.get_exponant_set(),
+                )),
+                self.scalar_sub_set,
+            ))).as_value().expect("Normalized expression is not a value and should be converted inside the matrix ring").value,
+                self.scalar_sub_set),*self))
         } else {
             a
         };
@@ -362,7 +357,13 @@ impl<T: Ring> Ring for M<T> {
     }
 }
 
-impl<T: Set, N> SetParseExpression<N> for M<T> {
+impl<T: SetParseExpression<N>, N> SetParseExpression<N> for M<T> {
+    fn parse_literal(&self, parser: &mut Parser) -> Result<Option<Self::Element>, String> {
+        Ok(self
+            .scalar_sub_set
+            .parse_literal(parser)?
+            .map(|parsed| VectorSpaceElement::Scalar(parsed, self.scalar_sub_set)))
+    }
     fn parse_expression(&self, parser: &mut Parser) -> Result<Option<Term<Self>>, ParserError> {
         match parser.token.kind {
             TokenKind::OpenBracket => {

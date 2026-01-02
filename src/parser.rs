@@ -46,6 +46,12 @@ impl ParserError {
     }
 }
 
+impl From<ParserError> for String {
+    fn from(value: ParserError) -> Self {
+        value.message
+    }
+}
+
 impl Error for ParserError {}
 
 impl Display for ParserError {
@@ -207,6 +213,7 @@ impl<E: Set, N> ParserTraitBounded<E, N> for Parser<'_> {
 impl<E: SetParseExpression<N>, N> ParserTraitBounded<E, N> for Parser<'_>
 where
     N: Sub<U1>,
+    E::ProductCoefficientSet: SetParseExpression<N>,
 {
     fn parse_expression_bounded(
         &mut self,
@@ -342,19 +349,29 @@ impl<E: Ring, N> ParseBinary<E, N> for Parser<'_> {
     }
 }
 impl Parser<'_> {
-    fn parse_literal_term<E: Set>(&mut self, set: E) -> Result<Option<Term<E>>, ParserError> {
+    fn parse_literal_term<E: SetParseExpression<N>, N>(
+        &mut self,
+        set: E,
+    ) -> Result<Option<Term<E>>, ParserError> {
         Ok(self
             .parse_literal(set)?
             .map(|lit| Term::Value(Value::new(lit, set))))
     }
-    pub fn parse_literal<E: Set>(&mut self, set: E) -> Result<Option<E::Element>, ParserError> {
+    /// Parse a literal living in the set `E`.
+    pub fn parse_literal<E: SetParseExpression<N>, N>(
+        &mut self,
+        set: E,
+    ) -> Result<Option<E::Element>, ParserError> {
+        set.parse_literal(self).map_err(ParserError::new)
+    }
+    /// Calls `f` is the current token is a literal, and advance token if `f`. Returns `Ok(None)` otherwise.
+    pub fn is_literal_and<E, F: Fn(&str) -> Result<Option<E>, String>>(
+        &mut self,
+        f: F,
+    ) -> Result<Option<E>, String> {
         let content = &self.input[self.span()];
         match &self.token.kind {
-            TokenKind::Literal { .. } => {
-                let lit = set.parse_literal(content).map_err(ParserError::new)?;
-                self.next_token();
-                Ok(Some(lit))
-            }
+            TokenKind::Literal { .. } => Ok(f(content)?.inspect(|_| self.next_token())),
             _ => Ok(None),
         }
     }

@@ -9,9 +9,10 @@ use std::{
 
 use crate::{
     field::{
-        Set,
+        Set, TryExprFrom,
         matrix::{M, VectorSpaceElement},
         real::R,
+        try_from_expr_default,
     },
     term::{Term, TermSet, Value},
 };
@@ -43,22 +44,30 @@ impl<T: Set> TryElementFrom<M<T>> for TermSet<T> {
     }
 }
 
-impl From<usize> for Term<R<Rational>> {
-    fn from(value: usize) -> Self {
-        Term::Value(Value::new(Rational::from(value), R))
+impl<From: Set, To: Set> TryExprFrom<TermSet<From>> for To {
+    fn try_from_expr(&self, value: Term<TermSet<From>>) -> Result<Term<Self>, TryCastError> {
+        match value {
+            Term::Value(value) => {
+                Ok(<TermSet<To> as TryElementFrom<TermSet<From>>>::try_from_element(value.value)?)
+            }
+            value => try_from_expr_default(self, value),
+        }
     }
 }
 
-impl<T> TryElementFrom<TermSet<R<T>>> for R<T>
-where
-    Self: Set,
-{
-    fn try_from_element(
-        value: <TermSet<R<T>> as Set>::Element,
-    ) -> Result<Self::Element, TryCastError> {
+impl<T: Set> TryElementFrom<TermSet<T>> for T {
+    fn try_from_element(value: Term<Self>) -> Result<Self::Element, TryCastError> {
         match value {
-            Term::Value(value) => Ok(value.get_value()),
-            _ => Err(TryCastError("Value is not a constant")),
+            Term::Value(value) => Ok(value.value),
+            _ => Err(TryCastError(
+                "Can't cast a non constant term to an element of T",
+            )),
         }
+    }
+}
+
+impl From<usize> for Term<R<Rational>> {
+    fn from(value: usize) -> Self {
+        Term::Value(Value::new(Rational::from(value), R))
     }
 }

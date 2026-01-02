@@ -44,9 +44,6 @@ pub trait Set: Clone + Copy + fmt::Debug + PartialEq + Eq + Hash + 'static {
     /// Pretty print an element of this set.
     fn pretty_print(&self, elem: &Self::Element, options: &PrintOptions) -> PrettyPrinter;
 
-    /// Parses a string to an element of this set
-    fn parse_literal(&self, value: &str) -> Result<Self::Element, String>;
-
     /// Get associated matrix set
     fn get_matrix_set(&self) -> M<Self> {
         M::new(*self)
@@ -147,6 +144,12 @@ impl<T: Set> TryElementFrom<T> for T {
     }
 }
 
+impl<T: Set, From: Set> TryElementFrom<From> for T {
+    default fn try_from_element(_value: From::Element) -> Result<Self::Element, TryCastError> {
+        Err(TryCastError("Cast not implemented"))
+    }
+}
+
 /// A ring is an abelian (commutative) [Group] with a binary operation `*` and :
 /// - `*` is associative
 /// - `*` has an identity element `one`
@@ -176,6 +179,10 @@ pub trait Ring: Group {
     fn as_fraction(&self, a: &Self::Element) -> (Self::Element, Self::Element) {
         (a.clone(), self.one())
     }
+    /// Return the expression unified
+    fn unify(&self, a: &Self::Element) -> Self::Element {
+        a.clone()
+    }
 
     /// Normalize a mathematical expression using rules specific to this group. Check [real::R::normalize]
     fn normalize(&self, a: Term<Self>) -> Term<Self> {
@@ -195,7 +202,10 @@ pub trait Ring: Group {
 
 /// Parsing methods trait. The generic `N` represents the current recursion depth using the `typenum` crate.
 pub trait SetParseExpression<N>: Set {
-    /// Custom parsing function, to parse element specific to this group. Check [M::parse_expression] for example.
+    /// Parses a string to an element of this set
+    fn parse_literal<'a>(&self, parser: &mut Parser<'a>) -> Result<Option<Self::Element>, String>;
+
+    /// Custom parsing function, to parse element specific to this set. Check [M::parse_expression] for example.
     fn parse_expression<'a>(
         &self,
         _parser: &mut Parser<'a>,
@@ -209,59 +219,64 @@ pub trait TryExprFrom<From: Set>: Set {
     /// Try to convert an expression over the set T into an expression over the set E.
     fn try_from_expr(&self, value: Term<From>) -> Result<Term<Self>, TryCastError>;
 }
-
-impl<From: Set, To: SetBound + TryElementFrom<From>> TryExprFrom<From> for To
-where
-    To::ExponantSet: TryExprFrom<From::ExponantSet>,
-    To::ProductCoefficientSet: TryElementFrom<From::ProductCoefficientSet>,
-{
-    fn try_from_expr(&self, value: Term<From>) -> Result<Term<Self>, TryCastError> {
-        match value {
-            Term::Value(value) => Ok(Term::Value(Value::new(
-                <Self as TryElementFrom<From>>::try_from_element(value.value)?,
-                *self,
-            ))),
-            Term::Symbol(symbol_term) => {
-                Ok(Term::Symbol(SymbolTerm::new(symbol_term.symbol, *self)))
-            }
-            Term::Add(add) => Ok(Add::new(
-                add.terms
-                    .into_iter()
-                    .map(|x| self.try_from_expr(x))
-                    .collect::<Result<Vec<_>, _>>()?,
-                *self,
-            )
-            .into()),
-            Term::Mul(mul) => {
-                Ok(
-                    Mul::new(
-                        <Self::ProductCoefficientSet as TryElementFrom<
-                            From::ProductCoefficientSet,
-                        >>::try_from_element(mul.coefficient)?,
-                        mul.factors
-                            .into_iter()
-                            .map(|x| self.try_from_expr(x))
-                            .collect::<Result<Vec<_>, _>>()?,
-                        *self,
-                    )
-                    .into(),
-                )
-            }
-            Term::Pow(pow) => Ok(Pow::new(
-                Box::new(self.try_from_expr((*pow.base).clone())?),
-                Box::new(
-                    self.get_exponant_set()
-                        .try_from_expr((**pow.exponant).clone())?,
-                ),
-                *self,
-            )
-            .into()),
-            Term::Fun(_) => {
-                // Function can't be converted. Maybe with constraints we can check if some conversions are possible,
-                // and then use a FunctionWrapper struct implementing Function trait to acheive the "conversion"
-                Err(TryCastError("Can't cast function"))
-            }
+pub(crate) fn try_from_expr_default<From: Set, To: Set>(
+    set: &To,
+    value: Term<From>,
+) -> Result<Term<To>, TryCastError> {
+    match value {
+        Term::Value(value) => Ok(Term::Value(Value::new(
+            <To as TryElementFrom<From>>::try_from_element(value.value)?,
+            *set,
+        ))),
+        Term::Symbol(symbol_term) => {
+            Ok(Term::Symbol(SymbolTerm::new(symbol_term.symbol, *set)))
         }
+        Term::Add(add) => Ok(Add::new(
+            add.terms
+                .into_iter()
+                .map(|x| set.try_from_expr(x))
+                .collect::<Result<Vec<_>, _>>()?,
+            *set,
+        )
+        .into()),
+        Term::Mul(mul) => {
+            Ok(
+                Mul::new(
+                    <To::ProductCoefficientSet as TryElementFrom<
+                        From::ProductCoefficientSet,
+                    >>::try_from_element(mul.coefficient)?,
+                    mul.factors
+                        .into_iter()
+                        .map(|x| TryExprFrom::<From>::try_from_expr(set, x))
+                        .collect::<Result<Vec<_>, _>>()?,
+                    *set,
+                )
+                .into(),
+            )
+        }
+        Term::Pow(pow) => Ok(Pow::new(
+            Box::new(TryExprFrom::<From>::try_from_expr(
+                set,
+                (*pow.base).clone(),
+            )?),
+            Box::new(TryExprFrom::<From::ExponantSet>::try_from_expr(
+                &set.get_exponant_set(),
+                (**pow.exponant).clone(),
+            )?),
+            *set,
+        )
+        .into()),
+        Term::Fun(_) => {
+            // Function can't be converted. Maybe with constraints we can check if some conversions are possible,
+            // and then use a FunctionWrapper struct implementing Function trait to acheive the "conversion"
+            Err(TryCastError("Can't cast function"))
+        }
+    }
+}
+
+impl<From: Set, To: Set> TryExprFrom<From> for To {
+    default fn try_from_expr(&self, value: Term<From>) -> Result<Term<Self>, TryCastError> {
+        try_from_expr_default(self, value)
     }
 }
 
