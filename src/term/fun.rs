@@ -55,14 +55,14 @@ impl<From: Set, T: Set> Function<T> for Fun<From, T> {
         for arg in &self.args {
             new_args.push(arg.normalize());
         }
-        Term::Fun(Box::new(Fun::new(self.ident, new_args, self.set)) as Box<dyn Function<T>>)
+        Term::Fun(Box::new(Self::new(self.ident, new_args, self.set)) as Box<dyn Function<T>>)
     }
     fn expand(&self) -> Term<T> {
         let mut new_args = vec![];
         for arg in &self.args {
             new_args.push(arg.expand());
         }
-        Term::Fun(Box::new(Fun::new(self.ident, new_args, self.set)) as Box<dyn Function<T>>)
+        Term::Fun(Box::new(Self::new(self.ident, new_args, self.set)) as Box<dyn Function<T>>)
     }
     fn get_set(&self) -> T {
         self.set
@@ -87,7 +87,7 @@ pub struct Fun<From: Set, T = From> {
 
 impl<From: Set, T> Fun<From, T> {
     /// Create a new function expression
-    pub fn new(ident: Symbol, args: Vec<Term<From>>, set: T) -> Self {
+    pub const fn new(ident: Symbol, args: Vec<Term<From>>, set: T) -> Self {
         Self {
             flags: 0,
             ident,

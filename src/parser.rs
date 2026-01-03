@@ -24,11 +24,11 @@ pub(crate) enum Op {
     Pow,
 }
 impl Op {
-    pub fn get_priority(&self) -> usize {
+    pub const fn get_priority(&self) -> usize {
         match self {
-            Op::Pow => 14,
-            Op::Multiply | Op::Divide => 13,
-            Op::Add | Op::Substract => 12,
+            Self::Pow => 14,
+            Self::Multiply | Self::Divide => 13,
+            Self::Add | Self::Substract => 12,
         }
     }
 }
@@ -42,7 +42,7 @@ pub struct ParserError {
 impl ParserError {
     /// Create a new parser error.
     #[must_use]
-    pub fn new(message: String) -> Self {
+    pub const fn new(message: String) -> Self {
         Self { message }
     }
 }
@@ -130,7 +130,7 @@ impl Parser<'_> {
         };
         self.prev_token = std::mem::replace(&mut self.token, next);
     }
-    fn span(&mut self) -> Range<usize> {
+    const fn span(&self) -> Range<usize> {
         self.start_span..self.end_span
     }
     /// Eat a token with a specific kind, raising an error if the current token kind doesn't match.
@@ -150,7 +150,7 @@ impl Parser<'_> {
         }
     }
     /// Return the next operator if it exists and consume it
-    fn get_op(&mut self) -> Option<Op> {
+    const fn get_op(&self) -> Option<Op> {
         match self.token.kind {
             TokenKind::Plus => Some(Op::Add),
             TokenKind::Minus => Some(Op::Substract),
@@ -161,13 +161,13 @@ impl Parser<'_> {
         }
     }
     /// Parse the parser's string, returning the parsed mathematical expression.
-    /// 
+    ///
     /// # Errors
     /// This method can return an error if the parsing failed.
     pub fn parse<E: Set>(&mut self, set: E) -> Result<Term<E>, ParserError> {
         Ok(
             ParserTraitBounded::<E, U10>::parse_expression_bounded(self, 0, set)?
-                .ok_or(ParserError::new("Input was empty".into()))?
+                .ok_or_else(|| ParserError::new("Input was empty".into()))?
                 .normalize(),
         )
     }
@@ -383,7 +383,7 @@ impl Parser<'_> {
     /// let n = parser.parse_literal::<_, U0>(R);
     /// assert_eq!(n, Ok(Some(42.into())));
     /// ```
-    /// 
+    ///
     /// # Errors
     /// This method can return an error if the parsing failed.
     pub fn parse_literal<E: SetParseExpression<N>, N>(
@@ -406,7 +406,7 @@ impl Parser<'_> {
     /// });
     /// assert_eq!(n, Ok(Some(5)));
     /// ```
-    /// 
+    ///
     /// # Errors
     /// This method can return an error if the parsing failed.
     pub fn is_literal_and<E, F: Fn(&str) -> Result<Option<E>, String>>(

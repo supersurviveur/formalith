@@ -309,10 +309,10 @@ impl<T: Group> std::ops::Sub for Term<T> {
 impl<T: Ring> Term<T> {
     /// Compute `self^exponant`
     #[must_use]
-    pub fn pow(&self, exponant: &Term<T::ExponantSet>) -> Term<T> {
+    pub fn pow(&self, exponant: &Term<T::ExponantSet>) -> Self {
         debug_assert!(!self.needs_normalization());
         debug_assert!(!exponant.needs_normalization());
-        let res = Term::Pow(Pow::new(self.clone(), exponant.clone(), self.get_set()));
+        let res = Self::Pow(Pow::new(self.clone(), exponant.clone(), self.get_set()));
         res.normalize()
     }
 }

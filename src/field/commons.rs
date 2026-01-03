@@ -68,6 +68,6 @@ impl<T: Set> TryElementFrom<TermSet<T>> for T {
 
 impl From<usize> for Term<R<Rational>> {
     fn from(value: usize) -> Self {
-        Term::Value(Value::new(Rational::from(value), R))
+        Self::Value(Value::new(Rational::from(value), R))
     }
 }

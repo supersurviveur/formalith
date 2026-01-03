@@ -32,8 +32,8 @@ impl<T: Clone> Copy for R<T> {}
 
 impl Set for R<Rational> {
     type Element = Rational;
-    type ExponantSet = R<Rational>;
-    type ProductCoefficientSet = R<Rational>;
+    type ExponantSet = Self;
+    type ProductCoefficientSet = Self;
     fn get_exponant_set(&self) -> Self::ExponantSet {
         *self
     }
@@ -59,13 +59,11 @@ impl Set for R<Rational> {
         } else {
             format!("{num}")
         });
-        if *den == 1 {
-            num
-        } else {
+        if *den != 1 {
             let den = PrettyPrinter::from(format!("{den}"));
             num.vertical_concat("─", &den);
-            num
         }
+        num
     }
     fn element_eq(&self, a: &Self::Element, b: &Self::Element) -> bool {
         a == b
@@ -136,7 +134,7 @@ impl Ring for R<Rational> {
                     let mul = term::Mul::new(
                         Rational::from_sign_and_naturals(
                             exponant.value.sign() == Ordering::Greater,
-                            numerator.clone(),
+                            numerator,
                             passed_denominator,
                         ),
                         vec![(**base.exponant).clone()],
@@ -282,7 +280,7 @@ impl Ring for R<Rational> {
 impl<N> SetParseExpression<N> for R<Rational> {
     fn parse_literal(&self, parser: &mut Parser) -> Result<Option<Self::Element>, String> {
         parser.is_literal_and(|value| {
-            Ok(Some(Rational::from_sci_string(value).ok_or(format!(
+            Ok(Some(Rational::from_sci_string(value).ok_or_else(|| format!(
                 "Failed to parse \"{value}\" to malachite::Integer",
             ))?))
         })

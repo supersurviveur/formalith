@@ -32,24 +32,24 @@ pub type MatrixResult<T> = Result<T, MatrixError>;
 
 impl<T: Set> Matrix<T> {
     /// Create a new matrix
-    pub fn new(size: (usize, usize), data: Vec<T::Element>, set: T) -> Self {
+    pub const fn new(size: (usize, usize), data: Vec<T::Element>, set: T) -> Self {
         Self { size, data, set }
     }
 
     /// Get the size of the matrix (height * width)
-    pub fn size(&self) -> usize {
+    pub const fn size(&self) -> usize {
         self.width() * self.height()
     }
 
     /// Get the width of the matrix.
     #[must_use]
-    pub fn width(&self) -> usize {
+    pub const fn width(&self) -> usize {
         self.size.1
     }
 
     /// Get the height of the matrix.
     #[must_use]
-    pub fn height(&self) -> usize {
+    pub const fn height(&self) -> usize {
         self.size.0
     }
 
@@ -111,7 +111,7 @@ impl<T: Group> std::ops::Neg for &Matrix<T> {
 }
 
 impl<T: Group> std::ops::Neg for Matrix<T> {
-    type Output = Matrix<T>;
+    type Output = Self;
 
     fn neg(self) -> Self::Output {
         -&self
@@ -119,7 +119,7 @@ impl<T: Group> std::ops::Neg for Matrix<T> {
 }
 
 impl<T: Ring> std::ops::Mul for Matrix<T> {
-    type Output = Matrix<T>;
+    type Output = Self;
 
     fn mul(self, rhs: Self) -> Self::Output {
         &self * &rhs
@@ -268,7 +268,7 @@ impl<T: Ring> Matrix<T> {
         if self.width() != self.height() {
             return Err(MatrixError::NotSquare);
         }
-        let mut augmented = Matrix::zero((self.size.0, self.size.1 * 2), self.set);
+        let mut augmented = Self::zero((self.size.0, self.size.1 * 2), self.set);
         for line in 0..self.height() {
             for column in 0..self.width() {
                 augmented[(line, column)] = self[(line, column)].clone();

@@ -25,7 +25,7 @@ type Monom<V, U> = (V, <U as Set>::Element);
 type PolynomElement<V, U, T> = (Vec<Monom<V, U>>, <T as Set>::Element);
 
 /// A multivariate polynomial, living in `T` with exponant in `U`. Variables can be any type implementing [Monomial], like [`crate::context::Symbol`] or [Term].
-#[derive(Debug, Clone, PartialEq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MultivariatePolynomial<V, T: Set, U: Set> {
     terms: Vec<PolynomElement<V, U, T>>,
     set: T,
@@ -34,7 +34,7 @@ pub struct MultivariatePolynomial<V, T: Set, U: Set> {
 
 impl<V, T: Set, U: Set> MultivariatePolynomial<V, T, U> {
     /// Create a new polynomial from its terms and sets.
-    pub fn new(terms: Vec<PolynomElement<V, U, T>>, set: T, exponant_set: U) -> Self {
+    pub const fn new(terms: Vec<PolynomElement<V, U, T>>, set: T, exponant_set: U) -> Self {
         Self {
             terms,
             set,
@@ -183,10 +183,10 @@ impl<T: Ring> ToTerm<T> for MultivariatePolynomial<Term<T>, TermSet<T>, TermSet<
     }
 }
 
-impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U>
+impl<V, T, U: Ring> MultivariatePolynomial<V, T, U>
 where
-    T: TryElementFrom<U>,
-    V: TryFrom<U::Element>,
+    T: Ring + TryElementFrom<U>,
+    V: Monomial + TryFrom<U::Element>,
     <V as TryFrom<U::Element>>::Error: Debug,
 {
     /// Computes the derivative of self according to `var`
@@ -203,22 +203,21 @@ where
             for (i, (v, exp)) in new_vars.iter_mut().enumerate() {
                 if v == var {
                     let new_exp = self.exponant_set.sub(exp, &self.exponant_set.one());
-                    let new_coeff = if let Ok(new_coeff) =
-                        T::try_from_element(exp.clone()).map(|c| self.set.mul(coeff, &c))
-                    {
-                        new_coeff
-                    } else {
-                        // Convert exponent to variable
-                        terms.push((
-                            vec![(
-                                V::try_from(exp.clone())
-                                    .expect("Exponent must be convertible to T or V"),
-                                self.exponant_set.one(),
-                            )],
-                            self.set.one(),
-                        ));
-                        coeff.clone()
-                    };
+                    let new_coeff = T::try_from_element(exp.clone()).map_or_else(
+                        |_| {
+                            // Convert exponent to variable
+                            terms.push((
+                                vec![(
+                                    V::try_from(exp.clone())
+                                        .expect("Exponent must be convertible to T or V"),
+                                    self.exponant_set.one(),
+                                )],
+                                self.set.one(),
+                            ));
+                            coeff.clone()
+                        },
+                        |c| self.set.mul(coeff, &c),
+                    );
 
                     if self.exponant_set.is_zero(&new_exp) {
                         new_vars.remove(i);
@@ -271,7 +270,7 @@ impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
             set,
             exponant_set,
         };
-        MultivariatePolynomial::normalize(&mut res);
+        Self::normalize(&mut res);
         res
     }
     fn from_term(term: PolynomElement<V, U, T>, set: T, exponant_set: U) -> Self {
@@ -280,7 +279,7 @@ impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
             set,
             exponant_set,
         };
-        MultivariatePolynomial::normalize(&mut res);
+        Self::normalize(&mut res);
         res
     }
 
@@ -457,7 +456,7 @@ impl<V: Monomial, T: Ring, U: Ring> std::ops::Add for &MultivariatePolynomial<V,
 }
 
 impl<V: Monomial, T: Ring, U: Ring> std::ops::Add for MultivariatePolynomial<V, T, U> {
-    type Output = MultivariatePolynomial<V, T, U>;
+    type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
         &self + &rhs
@@ -465,7 +464,7 @@ impl<V: Monomial, T: Ring, U: Ring> std::ops::Add for MultivariatePolynomial<V, 
 }
 
 impl<V: Monomial, T: Ring, U: Ring> std::ops::Add<&Self> for MultivariatePolynomial<V, T, U> {
-    type Output = MultivariatePolynomial<V, T, U>;
+    type Output = Self;
 
     fn add(self, rhs: &Self) -> Self::Output {
         &self + rhs
@@ -499,7 +498,7 @@ impl<V: Monomial, T: Ring, U: Ring> std::ops::Mul for &MultivariatePolynomial<V,
 }
 
 impl<V: Monomial, T: Ring, U: Ring> std::ops::Mul for MultivariatePolynomial<V, T, U> {
-    type Output = MultivariatePolynomial<V, T, U>;
+    type Output = Self;
 
     fn mul(self, rhs: Self) -> Self::Output {
         &self * &rhs
@@ -507,7 +506,7 @@ impl<V: Monomial, T: Ring, U: Ring> std::ops::Mul for MultivariatePolynomial<V, 
 }
 
 impl<V: Monomial, T: Ring, U: Ring> std::ops::Mul<&Self> for MultivariatePolynomial<V, T, U> {
-    type Output = MultivariatePolynomial<V, T, U>;
+    type Output = Self;
 
     fn mul(self, rhs: &Self) -> Self::Output {
         &self * rhs
@@ -536,10 +535,10 @@ impl<V: Monomial, T: Ring, U: Ring> std::ops::Sub for &MultivariatePolynomial<V,
     }
 }
 
-impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U>
+impl<V, T, U: Ring> MultivariatePolynomial<V, T, U>
 where
-    T: TryElementFrom<U>,
-    V: TryFrom<U::Element>,
+    T: Ring + TryElementFrom<U>,
+    V: Monomial + TryFrom<U::Element>,
     <V as TryFrom<U::Element>>::Error: Debug,
 {
     /// Factor the polynomial, returning factors as `(factor, multiplicity)`

@@ -22,7 +22,7 @@ pub struct PrintOptions {
 
 impl Default for PrintOptions {
     fn default() -> Self {
-        PrintOptions {
+        Self {
             colors: supports_color::on_cached(supports_color::Stream::Stdout).is_some(),
             typst: false,
             pretty_print: true,
@@ -33,7 +33,7 @@ impl Default for PrintOptions {
 impl PrintOptions {
     /// Print
     fn stdout() -> Self {
-        PrintOptions {
+        Self {
             colors: supports_color::on_cached(supports_color::Stream::Stdout).is_some(),
             typst: false,
             pretty_print: false,
@@ -50,7 +50,7 @@ pub struct Printer<'a, T> {
 
 impl<'a, T> Printer<'a, T> {
     /// Create a new Printer
-    pub fn new(content: &'a T, options: PrintOptions) -> Self {
+    pub const fn new(content: &'a T, options: PrintOptions) -> Self {
         Self { content, options }
     }
 }
@@ -209,7 +209,7 @@ pub struct PrettyPrinter {
 
 impl From<String> for PrettyPrinter {
     fn from(value: String) -> Self {
-        PrettyPrinter {
+        Self {
             width: value.len(),
             lines: vec![value],
             baseline: 0,
@@ -231,8 +231,8 @@ const fn get_drawings_chars(sym: char) -> Option<(char, char, char)> {
 impl PrettyPrinter {
     /// Create a new blank pretty printer.
     #[must_use]
-    pub fn empty() -> Self {
-        PrettyPrinter {
+    pub const fn empty() -> Self {
+        Self {
             lines: vec![],
             width: 0,
             baseline: 0,
@@ -240,7 +240,7 @@ impl PrettyPrinter {
     }
     /// Check if the pretty printer is blank.
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.width == 0
     }
 
@@ -454,12 +454,12 @@ impl PrettyPrinter {
     }
     /// Return the width of the pretty printer.
     #[must_use]
-    pub fn width(&self) -> usize {
+    pub const fn width(&self) -> usize {
         self.width
     }
     /// Return the height of the pretty printer.
     #[must_use]
-    pub fn height(&self) -> usize {
+    pub const fn height(&self) -> usize {
         self.lines.len()
     }
 }

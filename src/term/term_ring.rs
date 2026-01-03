@@ -22,7 +22,7 @@ impl<T> TermSet<T> {
     }
 
     /// Get the inner set
-    pub fn get_set(&self) -> &T {
+    pub const fn get_set(&self) -> &T {
         &self.0
     }
 }

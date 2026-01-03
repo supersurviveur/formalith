@@ -14,13 +14,13 @@ pub struct Token {
 impl Token {
     /// Create a new token
     #[must_use]
-    pub fn new(kind: TokenKind, len: usize) -> Token {
-        Token { kind, len }
+    pub const fn new(kind: TokenKind, len: usize) -> Self {
+        Self { kind, len }
     }
 }
 
 /// Describe the type of the token.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TokenKind {
     /// A space
     Whitespace,
@@ -69,7 +69,7 @@ pub enum TokenKind {
 }
 
 /// Describe the type of a literal
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LiteralTokenKind {
     /// An integer
     Int,
@@ -117,7 +117,7 @@ impl Lexer<'_> {
     fn peek_char(&self) -> char {
         self.chars.clone().next().unwrap_or('\0')
     }
-    fn eof(&mut self) -> bool {
+    fn eof(&self) -> bool {
         self.chars.clone().next().is_none()
     }
     fn lex(&mut self) -> Token {

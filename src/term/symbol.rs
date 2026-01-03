@@ -28,7 +28,7 @@ impl<T> Flags for SymbolTerm<T> {
 
 impl<T> SymbolTerm<T> {
     /// Create a new symbol expression
-    pub fn new(symbol: Symbol, set: T) -> Self {
+    pub const fn new(symbol: Symbol, set: T) -> Self {
         Self {
             flags: NORMALIZED,
             symbol,

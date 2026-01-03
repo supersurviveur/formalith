@@ -8,8 +8,10 @@
     missing_docs,
     clippy::cargo,
     clippy::pedantic,
-    // clippy::nursery
+    clippy::nursery
 )]
+// This lint is not relevant in most cases
+#![allow(clippy::or_fun_call)]
 // Allow this lint since it cause a stack overflow in clippy, probably due to infinite types.
 // A bug report should probably be filled
 #![allow(clippy::significant_drop_in_scrutinee)]

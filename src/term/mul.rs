@@ -30,7 +30,7 @@ impl<T: Set> Flags for Mul<T> {
 
 impl<T: Set> Mul<T> {
     /// Create a new product expression
-    pub fn new(
+    pub const fn new(
         coefficient: <T::ProductCoefficientSet as Set>::Element,
         factors: Vec<Term<T>>,
         ring: T,
@@ -56,7 +56,7 @@ impl<T: Set> Mul<T> {
         }
     }
     /// Returns true if the multiplication is empty.
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.factors.is_empty()
     }
     /// Get the number of terms in the product.
@@ -69,7 +69,7 @@ impl<T: Set> Mul<T> {
         self.factors.push(value);
     }
     /// Extend the product with another one, without normalizing it
-    pub fn extend(&mut self, other: Mul<T>) {
+    pub fn extend(&mut self, other: Self) {
         self.set_normalized(false);
         self.factors.extend(other.factors);
     }
@@ -93,7 +93,7 @@ impl<T: Set> Mul<T> {
         self.coefficient.clone()
     }
     /// Return the constant coefficient factor of the product through a mutable reference.
-    pub fn get_coeff_mut(&mut self) -> &mut <T::ProductCoefficientSet as Set>::Element {
+    pub const fn get_coeff_mut(&mut self) -> &mut <T::ProductCoefficientSet as Set>::Element {
         &mut self.coefficient
     }
 }
@@ -142,17 +142,18 @@ impl<T: Set> Mul<T> {
         options: &PrintOptions,
     ) -> crate::printer::PrettyPrinter {
         let mut den: Option<PrettyPrinter> = None;
-        let mut num: Option<PrettyPrinter> = None;
         // Print the cefficient at the beginning of the product
-        if self.has_coeff() {
-            num = Some(PrettyPrint::pretty_print(
+        let mut num = if self.has_coeff() {
+            Some(PrettyPrint::pretty_print(
                 &Term::Value(Value::new(
                     self.coefficient.clone(),
                     self.set.get_coefficient_set(),
                 )),
                 options,
-            ));
-        }
+            ))
+        } else {
+            None
+        };
         for factor in &self.factors {
             let printed = match factor {
                 Term::Pow(pow) if pow.exponant.is_strictly_negative() => {

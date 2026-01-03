@@ -28,7 +28,7 @@ impl<T: Set> Flags for Add<T> {
 
 impl<T: Set> Add<T> {
     /// Create an empty sum expression.
-    pub fn new(terms: Vec<Term<T>>, set: T) -> Self {
+    pub const fn new(terms: Vec<Term<T>>, set: T) -> Self {
         Self {
             flags: 0,
             terms,
@@ -44,11 +44,11 @@ impl<T: Set> Add<T> {
         }
     }
     /// Returns true if the addition is empty.
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.terms.is_empty()
     }
     /// Get the number of terms in the sum.
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.terms.len()
     }
     /// Add a term at the end of the sum, without normalizing it

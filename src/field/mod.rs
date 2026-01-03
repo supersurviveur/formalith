@@ -315,6 +315,7 @@ pub trait Derivable: Ring {
 }
 
 /// Wrapper for an element living in a set. This wrapper implements all usefull traits like `Eq` or `Hash` using the implementation of the set itself.
+///
 /// It's usefull for sets like `${ZZ/p ZZ}$`, where equality is not the equality on the integer type.
 #[derive(Eq)]
 pub struct SetElement<T: Set>(T, T::Element);
@@ -334,7 +335,7 @@ impl<T: Set> PartialEq for SetElement<T> {
 
 impl<T: Set> SetElement<T> {
     /// Wrap an element in a set.
-    pub fn new(set: T, value: T::Element) -> Self {
+    pub const fn new(set: T, value: T::Element) -> Self {
         Self(set, value)
     }
 }

@@ -18,7 +18,7 @@ pub struct Value<T: Set, V = <T as Set>::Element> {
 
 impl<T: Set> Value<T> {
     /// Create a new `Value` from an element of the set T
-    pub fn new(value: T::Element, set: T) -> Self {
+    pub const fn new(value: T::Element, set: T) -> Self {
         Self {
             flags: NORMALIZED,
             value,
