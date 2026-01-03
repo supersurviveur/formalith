@@ -24,7 +24,7 @@ impl<T: Debug + Clone + PartialEq + Eq + Hash + PartialOrd + PrettyPrint> Monomi
 type Monom<V, U> = (V, <U as Set>::Element);
 type PolynomElement<V, U, T> = (Vec<Monom<V, U>>, <T as Set>::Element);
 
-/// A multivariate polynomial, living in `T` with exponant in `U`. Variables can be any type implementing [Monomial], like [crate::context::Symbol] or [Term].
+/// A multivariate polynomial, living in `T` with exponant in `U`. Variables can be any type implementing [Monomial], like [`crate::context::Symbol`] or [Term].
 #[derive(Debug, Clone, PartialEq, Hash)]
 pub struct MultivariatePolynomial<V, T: Set, U: Set> {
     terms: Vec<PolynomElement<V, U, T>>,
@@ -136,6 +136,9 @@ impl<V: Monomial, T: Set, U: Group> MultivariatePolynomial<V, T, U> {
     }
 
     /// Get the leading monomial
+    ///
+    /// # Panics
+    /// Panics if the polynom is empty.
     pub fn leading_term(&self) -> PolynomElement<V, U, T> {
         self.terms.first().cloned().expect("Aucun terme")
     }
@@ -187,6 +190,10 @@ where
     <V as TryFrom<U::Element>>::Error: Debug,
 {
     /// Computes the derivative of self according to `var`
+    ///
+    /// # Panics
+    /// Panics if an exponant is not convertible into `T` or `V`.
+    #[must_use]
     pub fn derivative(&self, var: &V) -> Self {
         let mut terms = Vec::new();
 
@@ -353,7 +360,7 @@ impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
             let (lead_vars, lead_coeff) = current_dividend.leading_term();
             let (div_vars, div_coeff) = divisor.leading_term();
 
-            match Self::quot_rem_monomial(
+            if let Some((q_vars, q_coeff)) = Self::quot_rem_monomial(
                 &lead_vars,
                 &lead_coeff,
                 &div_vars,
@@ -361,23 +368,19 @@ impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
                 self.set,
                 self.exponant_set,
             ) {
-                Some((q_vars, q_coeff)) => {
-                    // trace!("{}", q_vars[0].1);
-                    // std::thread::sleep_ms(300);
-                    let term_poly = Self::from_term((q_vars, q_coeff), self.set, self.exponant_set);
+                // trace!("{}", q_vars[0].1);
+                // std::thread::sleep_ms(300);
+                let term_poly = Self::from_term((q_vars, q_coeff), self.set, self.exponant_set);
 
-                    quotient = &quotient + &term_poly;
+                quotient = &quotient + &term_poly;
 
-                    let to_subtract = &term_poly * divisor;
-                    // trace!("{:#?} / {:#?}", current_dividend, to_subtract);
-                    current_dividend = &current_dividend - &to_subtract;
-                }
-                None => {
-                    let term =
-                        Self::from_term((lead_vars, lead_coeff), self.set, self.exponant_set);
-                    remainder = remainder + &term;
-                    current_dividend = &current_dividend - &term;
-                }
+                let to_subtract = &term_poly * divisor;
+                // trace!("{:#?} / {:#?}", current_dividend, to_subtract);
+                current_dividend = &current_dividend - &to_subtract;
+            } else {
+                let term = Self::from_term((lead_vars, lead_coeff), self.set, self.exponant_set);
+                remainder = remainder + &term;
+                current_dividend = &current_dividend - &term;
             }
         }
 
@@ -392,6 +395,10 @@ impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
     }
     /// Compute GCD between self and other using euclide algorithm
     /// TODO divide by coefficient of higher exponant to get a unitary polynomial
+    ///
+    /// # Panics
+    /// Panics if the leading coefficient is not invertible.
+    #[must_use]
     pub fn gcd(&self, other: &Self) -> Self {
         if other.is_zero() {
             return self.clone();
@@ -411,6 +418,7 @@ impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
         res
     }
     /// Compute the content of a polynom
+    #[must_use]
     pub fn content(&self, var: &V) -> Self {
         let (coeffs, _) = self.separate_variable(var);
         coeffs
@@ -418,6 +426,7 @@ impl<V: Monomial, T: Ring, U: Ring> MultivariatePolynomial<V, T, U> {
             .fold(Self::one(self.set, self.exponant_set), |acc, x| acc.gcd(&x))
     }
     /// Primitive part of the polynomial
+    #[must_use]
     pub fn primitive_part(&self, var: &V) -> Self {
         let content = self.content(var);
         self.quot_rem(&content).0
@@ -610,7 +619,7 @@ impl<V: Monomial, T: Ring, U: Set> Print for MultivariatePolynomial<V, T, U> {
             for (i, (var, exponant)) in vars.iter().enumerate() {
                 if i == 0 && !has_coeff {
                 } else {
-                    write!(f, "*")?
+                    write!(f, "*")?;
                 }
                 var.print(options, f)?;
                 write!(f, "^")?;
@@ -626,7 +635,7 @@ impl<V: Monomial, T: Ring, U: Set> Print for MultivariatePolynomial<V, T, U> {
 impl<V: Monomial, T: Ring, U: Ring> PrettyPrint for MultivariatePolynomial<V, T, U> {
     fn pretty_print(&self, options: &PrintOptions) -> PrettyPrinter {
         let mut res = PrettyPrinter::empty();
-        for (vars, coeff) in self.terms.iter() {
+        for (vars, coeff) in &self.terms {
             let has_coeff = !self.set.is_one(coeff) || vars.is_empty();
             let mut coeff = if has_coeff {
                 self.set.pretty_print(coeff, options)

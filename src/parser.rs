@@ -1,4 +1,4 @@
-//! Parser implementation, used in [crate::parse] and [crate::try_parse] macros.
+//! Parser implementation, used in [`crate::parse`] and [`crate::try_parse`] macros.
 
 pub mod lexer;
 
@@ -41,6 +41,7 @@ pub struct ParserError {
 
 impl ParserError {
     /// Create a new parser error.
+    #[must_use]
     pub fn new(message: String) -> Self {
         Self { message }
     }
@@ -74,6 +75,7 @@ pub struct Parser<'a> {
 
 impl<'a> Parser<'a> {
     /// Create a new parser over the `input` string.
+    #[must_use]
     pub fn new(input: &'a str) -> Self {
         let mut parser = Parser {
             input,
@@ -90,7 +92,10 @@ impl<'a> Parser<'a> {
 
 /// Trait used by parser to implement some methods with specialization.
 pub trait ParserTraitBounded<E: Set, N> {
-    /// Parse an expression, which can be a literal, a sum, a group ()...
+    /// Parse an expression, which can be a literal, a sum, a group in parenthesis () ...
+    ///
+    /// # Errors
+    /// This method can return an error if the parsing failed.
     fn parse_expression_bounded(
         &mut self,
         priority: usize,
@@ -111,28 +116,30 @@ impl Parser<'_> {
     /// Update the current and previous token, skipping unnecessary tokens
     pub fn next_token(&mut self) {
         let mut next = self.next_token_internal();
-        loop {
+        let next = loop {
             match next {
                 None => {
-                    next = Some(Token::new(TokenKind::Eof, 0));
-                    break;
+                    break Token::new(TokenKind::Eof, 0);
                 }
-                Some(ref token) => match token.kind {
+                Some(token) => match token.kind {
                     TokenKind::Whitespace => {}
-                    _ => break,
+                    _ => break token,
                 },
             }
-            next = self.next_token_internal()
-        }
-        self.prev_token = std::mem::replace(&mut self.token, next.unwrap())
+            next = self.next_token_internal();
+        };
+        self.prev_token = std::mem::replace(&mut self.token, next);
     }
     fn span(&mut self) -> Range<usize> {
         self.start_span..self.end_span
     }
-    /// Eat a token with a specific kind, raising an error if the current token kind doesn't match.  
-    pub fn expect_token(&mut self, kind: TokenKind) -> Result<(), ParserError> {
+    /// Eat a token with a specific kind, raising an error if the current token kind doesn't match.
+    ///
+    /// # Errors
+    /// The method returns a `ParserError` if the kind of the current token is not the one expected.
+    pub fn expect_token(&mut self, kind: &TokenKind) -> Result<(), ParserError> {
         match &self.token.kind {
-            k if *k == kind => {
+            k if k == kind => {
                 self.next_token();
                 Ok(())
             }
@@ -154,6 +161,9 @@ impl Parser<'_> {
         }
     }
     /// Parse the parser's string, returning the parsed mathematical expression.
+    /// 
+    /// # Errors
+    /// This method can return an error if the parsing failed.
     pub fn parse<E: Set>(&mut self, set: E) -> Result<Term<E>, ParserError> {
         Ok(
             ParserTraitBounded::<E, U10>::parse_expression_bounded(self, 0, set)?
@@ -162,14 +172,14 @@ impl Parser<'_> {
         )
     }
 
-    fn parse_symbol<E: Set>(&mut self, set: E) -> Result<Option<Term<E>>, ParserError> {
+    fn parse_symbol<E: Set>(&mut self, set: E) -> Option<Term<E>> {
         match &self.token.kind {
             TokenKind::Ident(sym) => {
                 let tmp = sym.clone();
                 self.next_token();
-                Ok(Some(Term::Symbol(SymbolTerm::new(Symbol::new(tmp), set))))
+                Some(Term::Symbol(SymbolTerm::new(Symbol::new(tmp), set)))
             }
-            _ => Ok(None),
+            _ => None,
         }
     }
     fn parse_group<E: Set, N>(&mut self, set: E) -> Result<Option<Term<E>>, ParserError> {
@@ -178,7 +188,7 @@ impl Parser<'_> {
                 self.next_token();
                 let content =
                     ParserTraitBounded::<E, N>::parse_expression_bounded(self, 0, set)?.unwrap();
-                self.expect_token(TokenKind::CloseParen)?;
+                self.expect_token(&TokenKind::CloseParen)?;
                 Ok(Some(content))
             }
             _ => Ok(None),
@@ -192,7 +202,7 @@ impl Parser<'_> {
             self.next_token();
             args.push(
                 ParserTraitBounded::<E, N>::parse_expression_bounded(self, 0, arg_set)?.unwrap(),
-            )
+            );
         }
         Ok(args)
     }
@@ -229,11 +239,11 @@ where
         let node_in_coefficient_set =
             self_in_coefficient_set.parse_literal(set.get_coefficient_set());
         let node = node.map_or_else(|| self.parse_literal_term(set), |n| Ok(Some(n)))?;
-        let node = node.map_or_else(|| self.parse_symbol(set), |n| Ok(Some(n)))?;
+        let node = node.or_else(|| self.parse_symbol(set));
         let node = node.map_or_else(|| self.parse_group::<E, N>(set), |n| Ok(Some(n)))?;
 
         match (node, node_in_coefficient_set) {
-            (None, Err(_)) | (None, Ok(None)) => Ok(None),
+            (None, Err(_) | Ok(None)) => Ok(None),
             (Some(mut node), mut node_in_coefficient_set) => {
                 if let (TokenKind::OpenParen, Term::Symbol(symbol)) = (&self.token.kind, &node) {
                     self.next_token();
@@ -251,7 +261,7 @@ where
                             set,
                         ))),
                     };
-                    node = arg_set
+                    node = arg_set;
                 }
                 let mut op = self.get_op();
                 while self.token.kind != TokenKind::Eof
@@ -269,7 +279,7 @@ where
                     if node_in_coefficient_set.is_ok() {
                         node_in_coefficient_set = Err(ParserError::new(
                             "node_in_coefficient_set is already used".to_string(),
-                        ))
+                        ));
                     }
                     node = new_node;
                     if !parsed {
@@ -373,6 +383,9 @@ impl Parser<'_> {
     /// let n = parser.parse_literal::<_, U0>(R);
     /// assert_eq!(n, Ok(Some(42.into())));
     /// ```
+    /// 
+    /// # Errors
+    /// This method can return an error if the parsing failed.
     pub fn parse_literal<E: SetParseExpression<N>, N>(
         &mut self,
         set: E,
@@ -393,6 +406,9 @@ impl Parser<'_> {
     /// });
     /// assert_eq!(n, Ok(Some(5)));
     /// ```
+    /// 
+    /// # Errors
+    /// This method can return an error if the parsing failed.
     pub fn is_literal_and<E, F: Fn(&str) -> Result<Option<E>, String>>(
         &mut self,
         f: F,
@@ -440,7 +456,7 @@ impl<E: Group, N> ParseUnary<E, N> for Parser<'_> {
     }
 }
 
-/// Try parsing the given input inside the given set, returning a `Result`. See [crate::parse].
+/// Try parsing the given input inside the given set, returning a `Result`. See [`crate::parse`].
 #[macro_export(local_inner_macros)]
 macro_rules! try_parse {
     ( $x:expr, $f:expr ) => {

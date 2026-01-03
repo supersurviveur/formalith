@@ -17,7 +17,7 @@ impl<T: Group> std::ops::Add for &Term<T> {
         //     self.stdout(),
         //     rhs.stdout()
         // );
-        debug_assert!(!self.needs_normalization(), "{:#?}", self);
+        debug_assert!(!self.needs_normalization(), "{self:#?}");
         debug_assert!(!rhs.needs_normalization());
         let ring = self.get_set();
         if let Term::Add(a1) = self {
@@ -50,16 +50,16 @@ impl<T: Group> std::ops::Add for &Term<T> {
                                 std::cmp::Ordering::Greater => {
                                     res.push(a2.clone());
                                     a1_cursor = Some(a1); // Give the borrow back to cursor
-                                    a2_cursor = a2_iter.next()
+                                    a2_cursor = a2_iter.next();
                                 }
                             }
                         } else {
                             res.push(a1.clone());
-                            a1_cursor = a1_iter.next()
+                            a1_cursor = a1_iter.next();
                         }
                     } else if let Some(a2) = a2_cursor {
                         res.push(a2.clone());
-                        a2_cursor = a2_iter.next()
+                        a2_cursor = a2_iter.next();
                     }
                 }
                 res.set_normalized(true);
@@ -73,7 +73,7 @@ impl<T: Group> std::ops::Add for &Term<T> {
                     {
                         Ok(i) => {
                             if !a1_clone.terms[i].merge_terms(rhs) {
-                                a1_clone.terms.insert(i, rhs.clone())
+                                a1_clone.terms.insert(i, rhs.clone());
                             } else if a1_clone.terms[i].is_zero() {
                                 a1_clone.terms.remove(i);
                             }
@@ -249,7 +249,7 @@ impl<T: Group> std::ops::Neg for &Term<T> {
                     vec![new],
                     ring,
                 ))
-                .normalize()
+                .normalize();
             }
             Term::Mul(ref mut mul) => {
                 let coeff = mul.get_coeff();
@@ -262,12 +262,12 @@ impl<T: Group> std::ops::Neg for &Term<T> {
                     vec![new],
                     ring,
                 ))
-                .normalize()
+                .normalize();
             }
             Term::Fun(ref fun) => {
                 let set = fun.get_set();
                 new = Term::Mul(Mul::new(set.get_coefficient_set().nth(-1), vec![new], set))
-                    .normalize()
+                    .normalize();
             }
         }
         new
@@ -308,6 +308,7 @@ impl<T: Group> std::ops::Sub for Term<T> {
 
 impl<T: Ring> Term<T> {
     /// Compute `self^exponant`
+    #[must_use]
     pub fn pow(&self, exponant: &Term<T::ExponantSet>) -> Term<T> {
         debug_assert!(!self.needs_normalization());
         debug_assert!(!exponant.needs_normalization());

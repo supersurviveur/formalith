@@ -111,7 +111,7 @@ impl<From: Set, T: Set> Print for Fun<From, T> {
         Self::fg::<Cyan>(self.get_ident_as_str(), options, f)?;
         Self::group_delim("(", options, f)?;
         for (i, term) in self.args.iter().enumerate() {
-            write!(f, "{}", term)?;
+            write!(f, "{term}")?;
             if i != self.args.len() - 1 {
                 Self::delimiter(", ", options, f)?;
             }
@@ -128,17 +128,14 @@ impl<From: Set, T: Set> PrettyPrint for Fun<From, T> {
             res.concat(",", false, &arg);
         }
         res.paren();
-        match self.ident {
-            Context::ABS => {
-                let mut res = self.args.first().unwrap().pretty_print(options);
-                res.group('|', '|');
-                res
-            }
-            _ => {
-                let mut fun = PrettyPrinter::from(self.get_ident_as_str().to_string());
-                fun.concat("", false, &res);
-                fun
-            }
+        if self.ident == Context::ABS {
+            let mut res = self.args.first().unwrap().pretty_print(options);
+            res.group('|', '|');
+            res
+        } else {
+            let mut fun = PrettyPrinter::from(self.get_ident_as_str().to_string());
+            fun.concat("", false, &res);
+            fun
         }
     }
 }

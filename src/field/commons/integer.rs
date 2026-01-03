@@ -27,7 +27,9 @@ impl<T: Clone> Copy for Z<T> {}
 impl Set for Z<Integer> {
     type Element = Integer;
 
-    type ExponantSet = Z<Integer>; // TODO change type
+    type ExponantSet = Self; // TODO change type to N ?
+    type ProductCoefficientSet = Self;
+
     fn get_exponant_set(&self) -> Self::ExponantSet {
         *self
     }
@@ -40,7 +42,7 @@ impl Set for Z<Integer> {
         _: &crate::printer::PrintOptions,
         f: &mut std::fmt::Formatter<'_>,
     ) -> std::fmt::Result {
-        write!(f, "{}", elem)
+        write!(f, "{elem}")
     }
     fn pretty_print(
         &self,
@@ -101,14 +103,14 @@ impl Ring for Z<Integer> {
 impl<N> SetParseExpression<N> for Z<Integer> {
     fn parse_literal(&self, parser: &mut Parser) -> Result<Option<Self::Element>, String> {
         parser.is_literal_and(|value| {
-            Ok(Some(Integer::from_sci_string(value).ok_or(format!(
-                "Failed to parse \"{value}\" to malachite::Integer",
-            ))?))
+            Ok(Some(Integer::from_sci_string(value).ok_or_else(|| {
+                format!("Failed to parse \"{value}\" to malachite::Integer",)
+            })?))
         })
     }
 }
 
-/// The integer ring, using [malachite::Integer] as constant to get arbitrary precision integers.
+/// The integer ring, using [`malachite::Integer`] as constant to get arbitrary precision integers.
 pub const Z: Z<Integer> = Z {
     phantom: PhantomData,
 };

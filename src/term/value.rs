@@ -9,6 +9,7 @@ use super::{Flags, NORMALIZED};
 
 /// A constant in a mathematical expression, living in the algebraic set T
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[allow(clippy::struct_field_names)]
 pub struct Value<T: Set, V = <T as Set>::Element> {
     flags: u8,
     pub(crate) value: V,

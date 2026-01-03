@@ -61,7 +61,7 @@ impl<T: Set> Mul<T> {
     }
     /// Get the number of terms in the product.
     pub fn len(&self) -> usize {
-        self.factors.len() + self.has_coeff() as usize
+        self.factors.len() + usize::from(self.has_coeff())
     }
     /// Add a factor at the end of the product, without normalizing it
     pub fn push(&mut self, value: Term<T>) {
@@ -128,7 +128,7 @@ impl<T: Set> Print for Mul<T> {
         }
         for (i, factor) in self.factors.iter().enumerate() {
             Self::group(factor, options, f)?;
-            if i != self.len() - self.has_coeff() as usize {
+            if i != self.len() - usize::from(self.has_coeff()) {
                 Self::operator("*", options, f)?;
             }
         }
@@ -151,9 +151,9 @@ impl<T: Set> Mul<T> {
                     self.set.get_coefficient_set(),
                 )),
                 options,
-            ))
+            ));
         }
-        for factor in self.factors.iter() {
+        for factor in &self.factors {
             let printed = match factor {
                 Term::Pow(pow) if pow.exponant.is_strictly_negative() => {
                     let mut factor = pow.clone();
@@ -169,19 +169,19 @@ impl<T: Set> Mul<T> {
             match factor {
                 Term::Pow(pow) if pow.exponant.is_strictly_negative() => {
                     if let Some(den) = &mut den {
-                        den.concat("⋅", false, &elem)
+                        den.concat("⋅", false, &elem);
                     } else {
                         den = Some(elem);
                     }
                 }
                 _ => {
                     if let Some(num) = &mut num {
-                        num.concat("⋅", false, &elem)
+                        num.concat("⋅", false, &elem);
                     } else {
                         num = Some(elem);
                     }
                 }
-            };
+            }
         }
 
         let mut num = num.unwrap_or_else(f);

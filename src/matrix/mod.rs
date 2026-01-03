@@ -23,6 +23,8 @@ pub struct Matrix<T: Set> {
 pub enum MatrixError {
     /// The matrix is not a square matrix.
     NotSquare,
+    /// A pivot in a row reduction is not invertible.
+    NonInvertiblePivot,
 }
 
 /// Result type of matrix methods.
@@ -223,25 +225,28 @@ impl<T: Set> Display for Matrix<T> {
 
 impl<T: Ring> Matrix<T> {
     /// Transform the matrix in place in row reduced echelon form.
-    pub fn row_reduce(&mut self) {
-        self.partial_row_reduce();
-        self.back_substitution();
+    ///
+    /// # Errors
+    /// The method will fail if a pivot is not invertible.
+    pub fn row_reduce(&mut self) -> MatrixResult<()> {
+        self.partial_row_reduce()?;
+        self.back_substitution()
     }
     /// Transform a matrix in row $echelon form to a matrix in row reduced echelon form.
-    pub fn back_substitution(&mut self) {
+    ///
+    /// # Errors
+    /// The method will fail if a pivot is not invertible.
+    pub fn back_substitution(&mut self) -> MatrixResult<()> {
         for line in (0..self.height()).rev() {
             // Find the pivot
             if let Some(pivot) = (0..self.width()).find(|x| !self.set.is_zero(&self[(line, *x)])) {
                 if !self.set.is_one(&self[(line, pivot)]) {
                     self.scale_row(
                         line,
-                        &self.set.try_inv(&self[(line, pivot)]).unwrap_or_else(|| {
-                            panic!(
-                                "Can't execute back substitution, pivot {} isn't inversible",
-                                self.set
-                                    .pretty_print(&self[(line, pivot)], &PrintOptions::default())
-                            )
-                        }),
+                        &self
+                            .set
+                            .try_inv(&self[(line, pivot)])
+                            .ok_or(MatrixError::NonInvertiblePivot)?,
                     );
                 }
                 // Remove coefficients under the pivot
@@ -252,9 +257,13 @@ impl<T: Ring> Matrix<T> {
                 }
             }
         }
+        Ok(())
     }
 
     /// Compute the inverse of the matrix if possible.
+    ///
+    /// # Errors
+    /// The method will fail if the matrix is not square.
     pub fn inv(&self) -> MatrixResult<Self> {
         if self.width() != self.height() {
             return Err(MatrixError::NotSquare);
@@ -266,7 +275,7 @@ impl<T: Ring> Matrix<T> {
             }
             augmented[(line, line + self.width())] = self.set.one();
         }
-        augmented.row_reduce();
+        augmented.row_reduce()?;
 
         for line in 0..self.height() {
             for column in 0..self.width() {
@@ -281,7 +290,10 @@ impl<T: Ring> Matrix<T> {
 
 impl<T: Ring> Matrix<T> {
     /// Transforn the matrix in place in row echelon form, returning its rank.
-    pub fn partial_row_reduce(&mut self) -> usize {
+    ///
+    /// # Errors
+    /// The method will fail if a pivot is not inversible.
+    pub fn partial_row_reduce(&mut self) -> MatrixResult<usize> {
         let (rows, cols) = self.size;
         let mut pivot_row = 0;
 
@@ -291,11 +303,10 @@ impl<T: Ring> Matrix<T> {
             }
 
             // Find a non-null pivot
-            let pivot = match (pivot_row..rows)
-                .find(|&i| !self.set.is_zero(&self.data[i * cols + pivot_col]))
-            {
-                Some(p) => p,
-                None => continue,
+            let Some(pivot) =
+                (pivot_row..rows).find(|&i| !self.set.is_zero(&self.data[i * cols + pivot_col]))
+            else {
+                continue;
             };
 
             if pivot != pivot_row {
@@ -308,9 +319,13 @@ impl<T: Ring> Matrix<T> {
 
                 if !self.set.is_zero(&factor) {
                     let pivot_val = self.data[pivot_row * cols + pivot_col].clone();
-                    let ratio = self
-                        .set
-                        .mul(&factor, &self.set.try_inv(&pivot_val).unwrap());
+                    let ratio = self.set.mul(
+                        &factor,
+                        &self
+                            .set
+                            .try_inv(&pivot_val)
+                            .ok_or(MatrixError::NonInvertiblePivot)?,
+                    );
                     let neg_ratio = self.set.neg(&ratio);
                     self.row_add(row, pivot_row, &neg_ratio);
                 }
@@ -320,10 +335,13 @@ impl<T: Ring> Matrix<T> {
 
             pivot_row += 1;
         }
-        pivot_row
+        Ok(pivot_row)
     }
 
     /// Compute the determinant of the matrix.
+    ///
+    /// # Errors
+    /// This will returns an error if the matrix is not square.
     pub fn det(&self) -> MatrixResult<T::Element> {
         if self.height() != self.width() {
             return Err(MatrixError::NotSquare);
@@ -339,12 +357,15 @@ impl<T: Ring> Matrix<T> {
         }
     }
     /// Compute the determinant of the matrix in place. Matrix will be in partially reduced form then.
+    ///
+    /// # Errors
+    /// This will returns an error if the matrix is not square or if a pivot is not invertible.
     pub fn det_in_place(&mut self) -> MatrixResult<T::Element> {
         if self.height() != self.width() {
             return Err(MatrixError::NotSquare);
         }
 
-        self.partial_row_reduce();
+        self.partial_row_reduce()?;
         let mut det = self.set.one();
         for line in 0..self.width() {
             self.set

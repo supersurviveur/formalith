@@ -46,7 +46,7 @@ impl Set for R<Rational> {
         _: &crate::printer::PrintOptions,
         f: &mut std::fmt::Formatter<'_>,
     ) -> std::fmt::Result {
-        write!(f, "{}", elem)
+        write!(f, "{elem}")
     }
     fn pretty_print(
         &self,
@@ -253,9 +253,8 @@ impl Ring for R<Rational> {
                                 *self,
                             )
                             .into();
-                        } else {
-                            return terms;
                         }
+                        return terms;
                     }
                 } else if let (Term::Mul(mul), _) = (&**base, &**exponant) {
                     return Term::Mul(Mul::new(
@@ -298,7 +297,7 @@ impl Derivable for R<Rational> {
     }
 }
 
-/// The real field, using [malachite::rational::Rational] as constants to get arbitrary precision numbers.
+/// The real field, using [`malachite::rational::Rational`] as constants to get arbitrary precision numbers.
 pub const R: R<Rational> = R {
     phantom: PhantomData,
 };

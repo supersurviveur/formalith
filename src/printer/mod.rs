@@ -64,24 +64,29 @@ impl<T: PrettyPrint> Display for Printer<'_, T> {
 /// Elements and expressions which can be printed using options.
 pub trait Print {
     /// Create e new printer for self with specific options.
-    fn with_options<'a>(&'a self, options: PrintOptions) -> Printer<'a, Self>
+    fn with_options(&self, options: PrintOptions) -> Printer<'_, Self>
     where
         Self: Sized,
     {
         Printer::new(self, options)
     }
     /// Create e new printer for self with default options for printing on the stdout.
-    fn stdout<'a>(&'a self) -> Printer<'a, Self>
+    fn stdout(&self) -> Printer<'_, Self>
     where
         Self: Sized,
     {
         self.with_options(PrintOptions::stdout())
     }
     /// Format `self` using given options.
+    ///
+    /// # Errors
+    /// Returns an error if the formatter fails.
     fn print(&self, options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result;
 
     /// Apply delimiter color depending on options.
-    #[inline(always)]
+    ///
+    /// # Errors
+    /// Returns an error if the formatter fails.
     fn delimiter(
         text: &str,
         options: &PrintOptions,
@@ -94,7 +99,9 @@ pub trait Print {
     }
 
     /// Add paren to the expr if needed.
-    #[inline(always)]
+    ///
+    /// # Errors
+    /// Returns an error if the formatter fails.
     fn group<T: Set>(
         elem: &Term<T>,
         options: &PrintOptions,
@@ -118,7 +125,9 @@ pub trait Print {
     }
 
     /// Apply group delimiter color depending on options.
-    #[inline(always)]
+    ///
+    /// # Errors
+    /// Returns an error if the formatter fails.
     fn group_delim(
         text: &str,
         options: &PrintOptions,
@@ -130,13 +139,15 @@ pub trait Print {
         if options.colors {
             write!(f, "{}", text.white().dimmed())?;
         } else {
-            write!(f, "{}", text)?;
+            write!(f, "{text}")?;
         }
         Ok(())
     }
 
     /// Apply operator color depending on options.
-    #[inline(always)]
+    ///
+    /// # Errors
+    /// Returns an error if the formatter fails.
     fn operator(
         text: &str,
         options: &PrintOptions,
@@ -149,7 +160,9 @@ pub trait Print {
     }
 
     /// Apply a compile-time color depending on options.
-    #[inline(always)]
+    ///
+    /// # Errors
+    /// Returns an error if the formatter fails.
     fn fg<C: Color>(
         text: &str,
         options: &PrintOptions,
@@ -161,7 +174,7 @@ pub trait Print {
         if options.colors {
             write!(f, "{}", text.fg::<C>())?;
         } else {
-            write!(f, "{}", text)?;
+            write!(f, "{text}")?;
         }
         Ok(())
     }
@@ -169,6 +182,9 @@ pub trait Print {
 /// Elements and expressions which can be pretty printed using options.
 pub trait PrettyPrint: Print {
     /// Format `self` using given options, selecting or not pretty printing.
+    ///
+    /// # Errors
+    /// Returns an error if the formatter fails.
     fn fmt(&self, options: &PrintOptions, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if options.pretty_print {
             write!(f, "{}", self.pretty_print(options))
@@ -214,6 +230,7 @@ const fn get_drawings_chars(sym: char) -> Option<(char, char, char)> {
 
 impl PrettyPrinter {
     /// Create a new blank pretty printer.
+    #[must_use]
     pub fn empty() -> Self {
         PrettyPrinter {
             lines: vec![],
@@ -222,6 +239,7 @@ impl PrettyPrinter {
         }
     }
     /// Check if the pretty printer is blank.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.width == 0
     }
@@ -229,14 +247,17 @@ impl PrettyPrinter {
     /// Center horizontally and vertically the printer to be exactly of size (`height`*`width`)
     /// Return the final height of the printer (Can be bigger than the expected height, because of baseline alignement)
     ///
+    /// # Panics
     /// Panics if height or width is smaller than printer's size.
     pub fn center(&mut self, height: usize, width: usize, baseline: usize) -> usize {
-        if height < self.height() || width < self.width() {
-            panic!("Can't center self on a smaller size !");
-        }
-        if baseline > height {
-            panic!("Can't have a baseline greater than the height !")
-        }
+        assert!(
+            !(height < self.height() || width < self.width()),
+            "Can't center self on a smaller size !"
+        );
+        assert!(
+            baseline <= height,
+            "Can't have a baseline greater than the height !"
+        );
         // Center vertically, aligning baseline.
         let base_offset = baseline - self.baseline;
         for _ in 0..base_offset {
@@ -432,10 +453,12 @@ impl PrettyPrinter {
         self.group('(', ')');
     }
     /// Return the width of the pretty printer.
+    #[must_use]
     pub fn width(&self) -> usize {
         self.width
     }
     /// Return the height of the pretty printer.
+    #[must_use]
     pub fn height(&self) -> usize {
         self.lines.len()
     }
@@ -444,7 +467,7 @@ impl PrettyPrinter {
 impl Display for PrettyPrinter {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (i, line) in self.lines.iter().enumerate() {
-            write!(f, "{}", line)?;
+            write!(f, "{line}")?;
             if i != self.height() - 1 {
                 writeln!(f)?;
             }

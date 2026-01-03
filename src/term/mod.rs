@@ -1,5 +1,5 @@
 //! Mathematical expression implementation. An expression is represented as a [Term], which can be of many types.
-//! A term lives in a specific set, which can be a group, a ring, a field... Standard operations are defined between terms in [term_op].
+//! A term lives in a specific set, which can be a group, a ring, a field... Standard operations are defined between terms in [`term_op`].
 
 use std::{
     borrow::BorrowMut,
@@ -34,14 +34,14 @@ pub use pow::*;
 pub mod fun;
 pub use fun::*;
 pub mod flags;
-use flags::*;
+use flags::{Flags, NORMALIZED};
 
 /// A mathematical expression.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Term<T: Set> {
     /// See [Value]
     Value(Value<T>),
-    /// See [SymbolTerm]
+    /// See [`SymbolTerm`]
     Symbol(SymbolTerm<T>),
     /// See [Add]
     Add(Add<T>),
@@ -198,8 +198,7 @@ impl<T: Group> Term<T> {
     pub fn is_zero(&self) -> bool {
         match self {
             Term::Value(value) => value.set.is_zero(&value.value),
-            Term::Symbol(_) | Term::Add(_) | Term::Mul(_) | Term::Pow(_) => false,
-            Term::Fun(_) => false, // TODO how can we check if it's really not zero ?
+            Term::Symbol(_) | Term::Add(_) | Term::Mul(_) | Term::Pow(_) | Term::Fun(_) => false, // TODO how can we check if it's really not zero ?
         }
     }
 }
@@ -214,13 +213,12 @@ impl<T: Group> Term<T> {
                 .partial_cmp(v1, v2)
                 .unwrap_or(Ordering::Equal),
             (Term::Value(_), _) => Ordering::Greater,
-            (_, Term::Value(_)) => Ordering::Less,
             (Term::Symbol(s1), Term::Symbol(s2)) => s1.symbol.cmp(&s2.symbol),
             (Term::Pow(p1), Term::Pow(p2)) => p1
                 .base
                 .cmp(&p2.base)
                 .then_with(|| p1.exponant.cmp(&p2.exponant)),
-            (Term::Pow(_), _) => Ordering::Less,
+            (_, Term::Value(_)) | (Term::Pow(_), _) => Ordering::Less,
             (_, Term::Pow(_)) => Ordering::Greater,
             (Term::Mul(m1), Term::Mul(m2)) => {
                 let len_cmp = m1.len().cmp(&m2.len());
@@ -290,19 +288,19 @@ impl<T: Group> Term<T> {
                 Ordering::Equal
             }
             (Term::Mul(m1), v2) => {
-                if m1.len() - m1.has_coeff() as usize != 1 {
-                    Ordering::Greater
-                } else {
+                if m1.len() - usize::from(m1.has_coeff()) == 1 {
                     // Compare the non-coefficient part
                     m1.factors[0].cmp(v2)
+                } else {
+                    Ordering::Greater
                 }
             }
             (v1, Term::Mul(m2)) => {
-                if m2.len() - m2.has_coeff() as usize != 1 {
-                    Ordering::Less
-                } else {
+                if m2.len() - usize::from(m2.has_coeff()) == 1 {
                     // Compare the non-coefficient part
                     v1.cmp(&m2.factors[0])
+                } else {
+                    Ordering::Less
                 }
             }
             (Term::Symbol(_), _) => Ordering::Less,
@@ -343,6 +341,9 @@ impl<T: Group> Term<T> {
 
 impl<T: Ring> Term<M<TermSet<T>>> {
     /// Compute the determinant of the expression.
+    ///
+    /// # Errors
+    /// This method returns an error if `self` is a matrix which is not square.
     pub fn det(&self) -> MatrixResult<Term<T>> {
         match self {
             Term::Value(value) => match &value.value {
@@ -354,7 +355,7 @@ impl<T: Ring> Term<M<TermSet<T>>> {
                     Context::DET,
                     vec![self.clone()],
                     *self.get_set().scalar_sub_set.get_set(),
-                )) as Box<dyn Function<T>>))
+                ))))
             }
         }
     }
@@ -396,11 +397,13 @@ trait MergeFactors {
 /// Normalization trait.
 pub trait Normalize {
     /// Normalize an expression, i.e. sort sums and products, merge expressions that can be merged, remove useless expressions like zero in sums.
+    #[must_use]
     fn normalize(&self) -> Self;
 }
 /// Unification trait.
 pub trait Unify {
     /// Return the expression as a rational expression
+    #[must_use]
     fn unify(&self) -> Self;
 }
 
@@ -412,9 +415,11 @@ pub trait Expand {
     ///
     /// assert_eq!(parse!("(x+2)*(x+3)", R).expand(), parse!("x*x+5*x+6", R));
     /// ```
+    #[must_use]
     fn expand(&self) -> Self;
 
     /// Expand the expression without normalizing it
+    #[must_use]
     fn expand_without_norm(&self) -> Self;
 }
 
@@ -444,8 +449,8 @@ impl<T: Group> MergeTerms for Term<T> {
             }
             (Term::Mul(m1), Term::Mul(m2)) => {
                 // Merge 2*x*y + 3*x*y
-                let m1_len = m1.len() - m1.has_coeff() as usize;
-                let m2_len = m2.len() - m2.has_coeff() as usize;
+                let m1_len = m1.len() - usize::from(m1.has_coeff());
+                let m2_len = m2.len() - usize::from(m2.has_coeff());
                 if m1_len != m2_len {
                     return false;
                 }
@@ -464,7 +469,7 @@ impl<T: Group> MergeTerms for Term<T> {
             }
             (Term::Mul(m1), _) => {
                 // Merge 2*x + x
-                if m1.len() - m1.has_coeff() as usize != 1 || m1.factors[0] != *other {
+                if m1.len() - usize::from(m1.has_coeff()) != 1 || m1.factors[0] != *other {
                     false
                 } else {
                     let set = m1.set;
@@ -475,7 +480,7 @@ impl<T: Group> MergeTerms for Term<T> {
             }
             (_, Term::Mul(m2)) => {
                 // Merge x + 2*x
-                if m2.len() - m2.has_coeff() as usize != 1 || m2.factors[0] != *self {
+                if m2.len() - usize::from(m2.has_coeff()) != 1 || m2.factors[0] != *self {
                     false
                 } else {
                     let set = m2.set;
@@ -531,9 +536,7 @@ impl<T: Ring> Term<T> {
             }
             (Term::Pow(p1), Term::Pow(p2)) => {
                 // Merge x^2 * x^3
-                if *p1.base != *p2.base {
-                    return false;
-                } else {
+                if *p1.base == *p2.base {
                     **p1.exponant = Term::Add(Add::new(
                         vec![(**p1.exponant).clone(), (**p2.exponant).clone()],
                         other.get_set().get_exponant_set(),
@@ -541,6 +544,7 @@ impl<T: Ring> Term<T> {
                     **p1.exponant = (**p1.exponant).normalize();
                     return true;
                 }
+                return false;
             }
             _ => {}
         }
@@ -569,7 +573,9 @@ impl<T: Ring> MergeFactors for Term<T> {
 }
 impl<T: Ring<ExponantSet: Ring>> MergeFactors for Term<T> {
     fn merge_factors(&mut self, other: &Self) -> bool {
-        if !self.merge_factors_in_ring(other) {
+        if self.merge_factors_in_ring(other) {
+            true
+        } else {
             match (self.borrow_mut(), other) {
                 (Term::Pow(p1), _) => {
                     // Merge x^2 * x
@@ -631,8 +637,6 @@ impl<T: Ring<ExponantSet: Ring>> MergeFactors for Term<T> {
                 }
                 _ => false,
             }
-        } else {
-            true
         }
     }
 }
@@ -680,7 +684,7 @@ impl<T: Ring<ExponantSet: Ring, ProductCoefficientSet = T>> Term<T> {
                 );
 
                 for term in add {
-                    res = res + term.to_polynomial_impl()
+                    res = res + term.to_polynomial_impl();
                 }
 
                 res
@@ -693,7 +697,7 @@ impl<T: Ring<ExponantSet: Ring, ProductCoefficientSet = T>> Term<T> {
                 );
 
                 for factor in mul {
-                    res = res * factor.to_polynomial_impl()
+                    res = res * factor.to_polynomial_impl();
                 }
 
                 res
@@ -720,12 +724,10 @@ impl<T: Ring> Expand for Term<T> {
     fn expand_without_norm(&self) -> Self {
         debug_assert!(!self.needs_normalization());
         match self {
-            Term::Value(_) => self.clone(),
-            Term::Symbol(_) => self.clone(),
-            Term::Add(add) => Term::Add(Add::new(
-                add.iter().map(|term| term.expand()).collect(),
-                add.set,
-            )),
+            Term::Value(_) | Term::Symbol(_) => self.clone(),
+            Term::Add(add) => {
+                Term::Add(Add::new(add.iter().map(Expand::expand).collect(), add.set))
+            }
             Term::Mul(mul) => {
                 let mut mul = mul.clone();
                 let (num, den) = self.as_fraction(false);
@@ -735,14 +737,14 @@ impl<T: Ring> Expand for Term<T> {
                         mul = fraction;
                     } else {
                         return fraction;
-                    };
+                    }
                 }
                 let mut sums: Vec<Term<T>> = vec![];
                 let mut new_sums = vec![];
-                for factor in mul.iter() {
+                for factor in &mul {
                     let expanded = factor.expand();
                     if let Term::Add(add) = expanded {
-                        for term in add.iter() {
+                        for term in &add {
                             for sum in &sums {
                                 if let Term::Mul(mul) = sum {
                                     let mut mul = mul.clone();
@@ -795,6 +797,7 @@ impl<T: Ring> Expand for Term<T> {
 
 impl<T: Ring<ExponantSet: Ring, ProductCoefficientSet = T>> Term<T> {
     /// Factor the expression.
+    #[must_use]
     pub fn factor(&self) -> Self
     where
         TermSet<T>: TryElementFrom<TermSet<T::ExponantSet>>,
@@ -808,7 +811,7 @@ impl<T: Ring<ExponantSet: Ring, ProductCoefficientSet = T>> Term<T> {
             res *= factor.to_term().pow(&Term::constant(
                 self.get_set().get_exponant_set().nth(multiplicity.into()),
                 self.get_set().get_exponant_set(),
-            ))
+            ));
         }
         res
     }
@@ -833,11 +836,10 @@ impl<T: Ring> Term<T> {
         //     return self.clone();
         // }
         let mut res = match self {
-            Term::Value(_) => self.clone(),
-            Term::Symbol(_) => self.clone(),
+            Term::Value(_) | Term::Symbol(_) => self.clone(),
             Term::Add(add) => {
                 let mut res = vec![];
-                for term in add.iter() {
+                for term in add {
                     let normalized = term.normalize();
                     if normalized.is_zero() {
                         continue;
@@ -854,7 +856,7 @@ impl<T: Ring> Term<T> {
                 if res.is_empty() {
                     return Term::zero(self.get_set());
                 }
-                res.sort_by(|a, b| a.cmp_terms(b));
+                res.sort_by(Term::cmp_terms);
                 res.reverse();
 
                 // Merge terms
@@ -877,7 +879,7 @@ impl<T: Ring> Term<T> {
             Term::Mul(mul) => {
                 let mut res = vec![];
                 let mut coeff = mul.coefficient.clone();
-                for factor in mul.iter() {
+                for factor in mul {
                     let normalized = factor.normalize();
                     if normalized.is_zero() {
                         return Term::zero(self.get_set());
@@ -900,9 +902,8 @@ impl<T: Ring> Term<T> {
                 if res.is_empty() {
                     if mul.set.get_coefficient_set().is_one(&coeff) {
                         return Term::one(self.get_set());
-                    } else {
-                        return Term::zero(self.get_set());
                     }
+                    return Term::zero(self.get_set());
                 }
                 res.sort_by(Term::<T>::cmp_factors);
                 res.reverse();
@@ -976,7 +977,7 @@ impl<T: Ring<ExponantSet: Ring, ProductCoefficientSet = T>> Normalize for Term<T
     fn normalize(&self) -> Self {
         if let Term::Mul(mut mul) = self.clone() {
             let mut new_coeff = mul.coefficient.clone();
-            for factor in mul.iter() {
+            for factor in &mul {
                 if let Term::Value(Value { value, .. }) = factor {
                     mul.set
                         .get_coefficient_set()
@@ -1024,14 +1025,14 @@ impl<T: Ring> Term<T> {
                         .get_coefficient_set()
                         .mul_assign(&mut mul.coefficient, &n);
                 } else {
-                    num = Term::Mul(Mul::new(n, vec![num], mul.set)).normalize()
+                    num = Term::Mul(Mul::new(n, vec![num], mul.set)).normalize();
                 }
                 if let Term::Mul(mul) = &mut den {
                     mul.set
                         .get_coefficient_set()
                         .mul_assign(&mut mul.coefficient, &d);
                 } else {
-                    den = Term::Mul(Mul::new(d, vec![den], mul.set)).normalize()
+                    den = Term::Mul(Mul::new(d, vec![den], mul.set)).normalize();
                 }
                 (num, den)
             }
@@ -1083,7 +1084,8 @@ impl<T: Ring> Unify for Term<T> {
 }
 
 impl<T: Ring> Term<T> {
-    /// Simplify the expression by applying other simplification functions ([Self::unify], [Self::expand])
+    /// Simplify the expression by applying other simplification functions ([`Self::unify`], [`Self::expand`])
+    #[must_use]
     pub fn simplify(&self) -> Self {
         debug_assert!(!self.needs_normalization());
         let mut res = self.get_set().simplify(self.clone());
@@ -1097,6 +1099,7 @@ impl<T: Ring> Term<T> {
 
 impl<T: Ring> Term<T> {
     /// Invert the expression
+    #[must_use]
     pub fn inv(&self) -> Self {
         debug_assert!(!self.needs_normalization());
         Term::one(self.get_set()) / self

@@ -2,10 +2,21 @@
 //!
 //! $ f(x) $
 
-#![warn(rustdoc::broken_intra_doc_links, missing_docs)]
-#![deny(clippy::cargo)]
+// Enable some additional lints for code and documentation clarity
+#![warn(
+    rustdoc::all,
+    missing_docs,
+    clippy::cargo,
+    clippy::pedantic,
+    // clippy::nursery
+)]
+// Allow this lint since it cause a stack overflow in clippy, probably due to infinite types.
+// A bug report should probably be filled
+#![allow(clippy::significant_drop_in_scrutinee)]
+// Specialization is incomplete
 #![allow(incomplete_features)]
-#![feature(specialization, associated_type_defaults, iter_order_by)]
+// Usefull features. Since specialization is needed and therefore nightly edition too, we use other usefull features.
+#![feature(specialization, iter_order_by)]
 
 pub mod combinatorics;
 pub mod context;

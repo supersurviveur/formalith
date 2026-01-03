@@ -1,4 +1,4 @@
-//! The [OptionalDefault] trait for types with an optional default value.
+//! The [`OptionalDefault`] trait for types with an optional default value.
 
 use malachite::{Integer, Rational};
 
@@ -9,7 +9,7 @@ use crate::{
 
 /// Same as [Default], but if no default value is meaningfull, `None` can be returned.
 pub trait OptionalDefault: Sized {
-    /// Same as [Default::default], but optional.
+    /// Same as [`Default::default`], but optional.
     fn optional_default() -> Option<Self>;
 }
 

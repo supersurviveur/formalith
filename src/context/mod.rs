@@ -17,7 +17,7 @@ static SYMBOLS: AppendOnlyVec<SymbolData> = AppendOnlyVec::new();
 static GLOBAL_CONTEXT: LazyLock<RwLock<Context>> = LazyLock::new(|| RwLock::new(Context::new()));
 /// A symbol, representing a named variable.
 ///
-/// See [crate::symbol!] to create a new symbol.
+/// See [`crate::symbol`!] to create a new symbol.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Symbol(usize);
 
@@ -36,6 +36,10 @@ impl Symbol {
     /// assert_eq!(x, x2);
     /// assert_ne!(x, y);
     /// ```
+    ///
+    /// # Panics
+    /// This function will panic if the lock on the global context is poisoned.
+    #[must_use]
     pub fn new(name: String) -> Self {
         Context::get_global_context()
             .write()
@@ -110,6 +114,7 @@ impl Context {
     const BUILTIN_NAMES: [&'static str; 2] = ["abs", "det"];
 
     /// Create a new empty context
+    #[must_use]
     pub fn new() -> Self {
         let mut ctx = Self {
             symbols: HashMap::new(),
@@ -139,7 +144,8 @@ impl Context {
             .entry(name)
             .or_insert_with_key(|name| Symbol(SYMBOLS.push(SymbolData { name: name.clone() })))
     }
-    /// Return a reference to the [SymbolData] of a given [Symbol]
+    /// Return a reference to the [`SymbolData`] of a given [Symbol]
+    #[must_use]
     pub fn get_symbol_data(symbol: &Symbol) -> &'static SymbolData {
         &SYMBOLS[symbol.0]
     }

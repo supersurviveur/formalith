@@ -4,7 +4,7 @@ use std::{cmp::Ordering, fmt, hash::Hash};
 
 use crate::{
     context::Symbol,
-    field::{integer::Z, matrix::M},
+    field::matrix::M,
     parser::{Parser, ParserError},
     printer::{PrettyPrinter, PrintOptions},
     term::{Add, Mul, Pow, SymbolTerm, Term, TermSet, Value},
@@ -13,19 +13,18 @@ use crate::{
 
 pub mod commons;
 pub use commons::*;
-use malachite::Integer;
 
 /// A set.
 pub trait Set: Clone + Copy + fmt::Debug + PartialEq + Eq + Hash + 'static {
     /// The type of the elements living in this set
     type Element: Clone + fmt::Debug + PartialEq + Eq + Hash;
 
-    /// The set where exponants live. Mostly [const@integer::Z], but it can be any group,
-    /// like [const@real::R] for real numbers since power is not only a notation for `x*x*...*x` but a defined operation.
-    type ExponantSet: Group + OptionalDefault = Z<Integer>;
+    /// The set where exponants live. Mostly [`const@integer::Z`], but it can be any group,
+    /// like [`const@real::R`] for real numbers since power is not only a notation for `x*x*...*x` but a defined operation.
+    type ExponantSet: Group + OptionalDefault;
 
-    /// The set where coefficients in product live. Mostly [const@integer::Z], but it can be any ring.
-    type ProductCoefficientSet: Ring + OptionalDefault = Z<Integer>;
+    /// The set where coefficients in product live. Mostly [`const@integer::Z`], but it can be any ring.
+    type ProductCoefficientSet: Ring + OptionalDefault;
 
     /// Get the exponant set for this set
     fn get_exponant_set(&self) -> Self::ExponantSet;
@@ -34,6 +33,9 @@ pub trait Set: Clone + Copy + fmt::Debug + PartialEq + Eq + Hash + 'static {
     fn get_coefficient_set(&self) -> Self::ProductCoefficientSet;
 
     /// Print an element of this set.
+    ///
+    /// # Errors
+    /// Returns an error if the formatter fails.
     fn print(
         &self,
         elem: &Self::Element,
@@ -73,9 +75,8 @@ pub trait Group: PartiallyOrderedSet {
     fn zero(&self) -> Self::Element;
     /// Check if a number is zero.
     ///
-    /// Defaults to an equality check with [Group::zero], but it's not always a desired behaviour :
+    /// Defaults to an equality check with [`Group::zero`], but it's not always a desired behaviour :
     /// `10` in `Z/5Z` is zero (in its equivalence class)
-    #[inline(always)]
     fn is_zero(&self, a: &Self::Element) -> bool {
         *a == self.zero()
     }
@@ -84,14 +85,12 @@ pub trait Group: PartiallyOrderedSet {
     /// Add two elements of this group.
     fn add(&self, a: &Self::Element, b: &Self::Element) -> Self::Element;
     /// Add two elements of this group into the first one.
-    #[inline(always)]
     fn add_assign(&self, a: &mut Self::Element, b: &Self::Element) {
         *a = self.add(a, b);
     }
     /// Computes the symetric (inverse) element of `a` in this group for `+`
     fn neg(&self, a: &Self::Element) -> Self::Element;
     /// Computes the symetric (inverse) element of `a` in this group for `+` into `a`
-    #[inline(always)]
     fn neg_assign(&self, a: &mut Self::Element) {
         *a = self.neg(a);
     }
@@ -134,6 +133,9 @@ impl<T: Set<ExponantSet: Set<ExponantSet = Self::ExponantSet>>> SetBound for T {
 /// Trait to cast an element from a set to another set.
 pub trait TryElementFrom<T: Set>: Set {
     /// Try to convert an element of the set T into an element of the set E.
+    ///
+    /// # Errors
+    /// This function should return an `TryCastError` if the cast is impossible.
     fn try_from_element(value: T::Element) -> Result<Self::Element, TryCastError>;
 }
 
@@ -159,16 +161,14 @@ pub trait Ring: Group {
     fn one(&self) -> Self::Element;
     /// Check if a number is one.
     ///
-    /// Defaults to an equality check with [Ring::one], but it's not always a desired behaviour :
+    /// Defaults to an equality check with [`Ring::one`], but it's not always a desired behaviour :
     /// `11`in `Z/5Z` is one (in its equivalence class)
-    #[inline(always)]
     fn is_one(&self, a: &Self::Element) -> bool {
         *a == self.one()
     }
     /// Multiply two elements of this ring
     fn mul(&self, a: &Self::Element, b: &Self::Element) -> Self::Element;
     /// Multiply two elements of this ring into a
-    #[inline(always)]
     fn mul_assign(&self, a: &mut Self::Element, b: &Self::Element) {
         *a = self.mul(a, b);
     }
@@ -184,17 +184,17 @@ pub trait Ring: Group {
         a.clone()
     }
 
-    /// Normalize a mathematical expression using rules specific to this group. Check [real::R::normalize]
+    /// Normalize a mathematical expression using rules specific to this group. Check [`real::R::normalize`]
     fn normalize(&self, a: Term<Self>) -> Term<Self> {
         a
     }
 
-    /// Expand a mathematical expression using rules specific to this group. Check [M::expand]
+    /// Expand a mathematical expression using rules specific to this group. Check [`M::expand`]
     fn expand(&self, a: Term<Self>) -> Term<Self> {
         a
     }
 
-    /// Simplify a mathematical expression using rules specific to this group. Check [M::simplify]
+    /// Simplify a mathematical expression using rules specific to this group. Check [`M::simplify`]
     fn simplify(&self, a: Term<Self>) -> Term<Self> {
         a
     }
@@ -203,12 +203,18 @@ pub trait Ring: Group {
 /// Parsing methods trait. The generic `N` represents the current recursion depth using the `typenum` crate.
 pub trait SetParseExpression<N>: Set {
     /// Parses a string to an element of this set
-    fn parse_literal<'a>(&self, parser: &mut Parser<'a>) -> Result<Option<Self::Element>, String>;
+    ///
+    /// # Errors
+    /// This method can return an error if the parsing failed.
+    fn parse_literal(&self, parser: &mut Parser<'_>) -> Result<Option<Self::Element>, String>;
 
-    /// Custom parsing function, to parse element specific to this set. Check [M::parse_expression] for example.
-    fn parse_expression<'a>(
+    /// Custom parsing function, to parse element specific to this set. Check [`M::parse_expression`] for example.
+    ///
+    /// # Errors
+    /// This method can return an error if the parsing failed.
+    fn parse_expression(
         &self,
-        _parser: &mut Parser<'a>,
+        _parser: &mut Parser<'_>,
     ) -> Result<Option<Term<Self>>, ParserError> {
         Ok(None)
     }
@@ -217,6 +223,9 @@ pub trait SetParseExpression<N>: Set {
 /// Trait to cast an expression from a set to another set.
 pub trait TryExprFrom<From: Set>: Set {
     /// Try to convert an expression over the set T into an expression over the set E.
+    ///
+    /// # Errors
+    /// This function should return an `TryCastError` if the cast is impossible.
     fn try_from_expr(&self, value: Term<From>) -> Result<Term<Self>, TryCastError>;
 }
 pub(crate) fn try_from_expr_default<From: Set, To: Set>(

@@ -97,19 +97,19 @@ pub trait Combinatorics: Sized {
 impl Combinatorics for Integer {
     fn binom(n: Self, mut k: Self) -> Self {
         if n < 0 || k < 0 || k > n {
-            return Integer::ZERO;
+            return Self::ZERO;
         }
 
-        if k > &n / Integer::from(2) {
+        if k > &n / Self::from(2) {
             k = &n - &k;
         }
 
         if k == 0 {
-            return Integer::ONE;
+            return Self::ONE;
         }
 
-        let mut result = Integer::ONE;
-        for i in integer_increasing_inclusive_range(Integer::ONE, k.clone()) {
+        let mut result = Self::ONE;
+        for i in integer_increasing_inclusive_range(Self::ONE, k.clone()) {
             result *= &n - &k + &i;
             result /= &i;
         }
@@ -117,12 +117,12 @@ impl Combinatorics for Integer {
     }
 
     fn multinom(k: &[Self]) -> Self {
-        let mut result = Integer::ONE;
-        let mut acc = Integer::ZERO;
+        let mut result = Self::ONE;
+        let mut acc = Self::ZERO;
 
         for value in k {
             acc += value;
-            result *= Self::binom(acc.clone(), value.clone())
+            result *= Self::binom(acc.clone(), value.clone());
         }
 
         result

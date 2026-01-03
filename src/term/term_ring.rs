@@ -130,7 +130,7 @@ impl<T: Set, N> SetParseExpression<N> for TermSet<T> {
         )
     }
 
-    fn parse_literal<'a>(&self, parser: &mut Parser<'a>) -> Result<Option<Self::Element>, String> {
+    fn parse_literal(&self, parser: &mut Parser<'_>) -> Result<Option<Self::Element>, String> {
         Ok(ParserTraitBounded::<T, N>::parse_expression_bounded(
             parser,
             0,

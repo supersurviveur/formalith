@@ -25,19 +25,23 @@ pub enum VectorSpaceElement<T: Set, Vector> {
 
 impl<T: Ring> VectorSpaceElement<T, Matrix<T>> {
     /// Compute the determinant of self in set `T`.
+    ///
+    /// # Errors
+    /// This will returns an error if the element is a matrix and the determinant cannot be computed,
+    /// for instance if the matrix is not square.
     pub fn det(&self) -> MatrixResult<T::Element> {
         match self {
-            VectorSpaceElement::Scalar(scalar, _) => Ok(scalar.clone()),
-            VectorSpaceElement::Vector(matrix) => matrix.det(),
+            Self::Scalar(scalar, _) => Ok(scalar.clone()),
+            Self::Vector(matrix) => matrix.det(),
         }
     }
 }
 
 impl<T: PartiallyOrderedSet, Vector: PartialEq> PartialOrd for VectorSpaceElement<T, Vector> {
     #[inline]
-    fn partial_cmp(&self, other: &VectorSpaceElement<T, Vector>) -> Option<Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self, other) {
-            (VectorSpaceElement::Scalar(s1, set), VectorSpaceElement::Scalar(s2, _)) => {
+            (Self::Scalar(s1, set), Self::Scalar(s2, _)) => {
                 set.partial_cmp(s1, s2)
             }
             _ => None,
@@ -51,8 +55,8 @@ impl<T: Set, Vector: Print> Print for VectorSpaceElement<T, Vector> {
         f: &mut std::fmt::Formatter<'_>,
     ) -> std::fmt::Result {
         match self {
-            VectorSpaceElement::Scalar(scalar, set) => set.print(scalar, options, f),
-            VectorSpaceElement::Vector(vector) => vector.print(options, f),
+            Self::Scalar(scalar, set) => set.print(scalar, options, f),
+            Self::Vector(vector) => vector.print(options, f),
         }
     }
 }
@@ -60,8 +64,8 @@ impl<T: Set, Vector: Print> Print for VectorSpaceElement<T, Vector> {
 impl<T: Set, Vector: PrettyPrint> PrettyPrint for VectorSpaceElement<T, Vector> {
     fn pretty_print(&self, options: &crate::printer::PrintOptions) -> PrettyPrinter {
         match self {
-            VectorSpaceElement::Scalar(scalar, set) => set.pretty_print(scalar, options),
-            VectorSpaceElement::Vector(vector) => vector.pretty_print(options),
+            Self::Scalar(scalar, set) => set.pretty_print(scalar, options),
+            Self::Vector(vector) => vector.pretty_print(options),
         }
     }
 }
@@ -80,7 +84,7 @@ pub struct M<T> {
 
 impl<T> M<T> {
     /// Create a new matrix ring over T
-    pub fn new(scalar_sub_set: T) -> Self {
+    pub const fn new(scalar_sub_set: T) -> Self {
         Self { scalar_sub_set }
     }
 }
@@ -152,7 +156,7 @@ impl<T: Group> Group for M<T> {
             (VectorSpaceElement::Vector(a), VectorSpaceElement::Vector(b)) => {
                 VectorSpaceElement::Vector(a + b)
             }
-            _ => panic!("Can't add a scalar and a vector ! ({} + {})", a, b),
+            _ => panic!("Can't add a scalar and a vector ! ({a} + {b})"),
         }
     }
 
@@ -208,11 +212,11 @@ impl<T: Ring> Ring for M<T> {
                             .normalize(Term::Value(Value::new(x.clone(), self.scalar_sub_set)))
                             .as_value()
                             .expect("Unified expression is not a value and should be converted inside the matrix ring")
-                            .value
+                            .value;
                 });
                 VectorSpaceElement::Vector(res)
             }
-            _ => a.clone(),
+            VectorSpaceElement::Scalar(_, _) => a.clone(),
         };
         (num, self.one())
     }
@@ -286,7 +290,7 @@ impl<T: Ring> Ring for M<T> {
                             VectorSpaceElement::Vector(
                                 matrix
                                     .inv()
-                                    .unwrap_or_else(|_| panic!("Cannot invert matrix {}", matrix)),
+                                    .unwrap_or_else(|_| panic!("Cannot invert matrix {matrix}")),
                             ),
                             *self,
                         )),
@@ -386,7 +390,7 @@ impl<T: SetParseExpression<N>, N> SetParseExpression<N> for M<T> {
                 let mut lines = vec![];
                 let mut size = None;
                 loop {
-                    parser.expect_token(TokenKind::OpenBracket)?;
+                    parser.expect_token(&TokenKind::OpenBracket)?;
 
                     let mut line_size = 0;
                     loop {
@@ -409,17 +413,17 @@ impl<T: SetParseExpression<N>, N> SetParseExpression<N> for M<T> {
                             ));
                         }
                     } else {
-                        size = Some(line_size)
+                        size = Some(line_size);
                     }
 
-                    parser.expect_token(TokenKind::CloseBracket)?;
+                    parser.expect_token(&TokenKind::CloseBracket)?;
 
                     if parser.token.kind != TokenKind::Comma {
                         break;
                     }
                     parser.next_token();
                 }
-                parser.expect_token(TokenKind::CloseBracket)?;
+                parser.expect_token(&TokenKind::CloseBracket)?;
                 Ok(Some(Term::Value(Value::new(
                     VectorSpaceElement::Vector(Matrix::new(
                         (lines.len() / size.unwrap(), size.unwrap()),

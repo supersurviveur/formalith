@@ -163,7 +163,7 @@ impl<T: Set> Add<T> {
         options: &PrintOptions,
     ) -> crate::printer::PrettyPrinter {
         let mut res: Option<PrettyPrinter> = None;
-        for term in self.terms.iter() {
+        for term in &self.terms {
             if !special_cases(term, &mut res) {
                 match term {
                     Term::Mul(mul)

@@ -13,6 +13,7 @@ pub struct Token {
 
 impl Token {
     /// Create a new token
+    #[must_use]
     pub fn new(kind: TokenKind, len: usize) -> Token {
         Token { kind, len }
     }
@@ -32,6 +33,10 @@ pub enum TokenKind {
     OpenBracket,
     /// ]
     CloseBracket,
+    /// {
+    OpenBrace,
+    /// }
+    CloseBrace,
     /// An identifier
     Ident(String),
 
@@ -49,7 +54,7 @@ pub enum TokenKind {
     /// ^
     Caret,
 
-    /// A literal, which can be of any kind in [LiteralTokenKind]
+    /// A literal, which can be of any kind in [`LiteralTokenKind`]
     Literal {
         /// Its kind
         kind: LiteralTokenKind,
@@ -140,8 +145,8 @@ impl Lexer<'_> {
             //     }
             //     _ => TokenKind::Eq,
             // },
-            '{' => TokenKind::OpenBracket,
-            '}' => TokenKind::CloseBracket,
+            '{' => TokenKind::OpenBrace,
+            '}' => TokenKind::CloseBrace,
             '(' => TokenKind::OpenParen,
             ')' => TokenKind::CloseParen,
             '[' => TokenKind::OpenBracket,
@@ -207,7 +212,7 @@ impl Display for Lexer<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let new = self.clone();
         for token in new {
-            writeln!(f, "{:?}", token)?;
+            writeln!(f, "{token:?}")?;
         }
         Ok(())
     }
