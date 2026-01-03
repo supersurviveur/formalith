@@ -191,7 +191,7 @@ impl<T: Group> Term<T> {
     }
     /// Check if the term is zero
     /// ```
-    /// use formalith::{field::R, parse, symbol};
+    /// use formalith::{field::real::R, parse, symbol};
     ///
     /// assert!(parse!("0", R).is_zero());
     /// ```
@@ -408,7 +408,7 @@ pub trait Unify {
 pub trait Expand {
     /// Expand the expression.
     /// ```
-    /// use formalith::{field::R, parse, symbol};
+    /// use formalith::{field::real::R, parse, symbol, term::Expand};
     ///
     /// assert_eq!(parse!("(x+2)*(x+3)", R).expand(), parse!("x*x+5*x+6", R));
     /// ```
@@ -1107,7 +1107,7 @@ impl<T: Ring> Term<T> {
     }
     /// Check if the term is one
     /// ```
-    /// use formalith::{field::R, parse, symbol};
+    /// use formalith::{field::real::R, parse, symbol};
     ///
     /// assert!(parse!("1", R).is_one());
     /// ```

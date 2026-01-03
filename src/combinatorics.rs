@@ -3,9 +3,9 @@
 use std::marker::PhantomData;
 
 use malachite::{
+    Integer,
     base::num::basic::traits::{One, Zero},
     integer::exhaustive::integer_increasing_inclusive_range,
-    Integer,
 };
 
 /// Iterator over compositions.
@@ -28,6 +28,7 @@ pub struct CompositionIterator<'a> {
 
 impl CompositionIterator<'_> {
     /// Create a new composition iterator.
+    #[must_use]
     pub fn new(n: usize, k: usize) -> Self {
         Self {
             indices: vec![0; n],

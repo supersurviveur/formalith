@@ -2,8 +2,8 @@
 //!
 //! $ f(x) $
 
-#![warn(rustdoc::broken_intra_doc_links)]
-#![warn(missing_docs)]
+#![warn(rustdoc::broken_intra_doc_links, missing_docs)]
+#![deny(clippy::cargo)]
 #![allow(incomplete_features)]
 #![feature(specialization, associated_type_defaults, iter_order_by)]
 

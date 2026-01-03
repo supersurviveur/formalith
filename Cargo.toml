@@ -1,7 +1,13 @@
 [package]
 name = "formalith"
+description = "Modern computer algebra system focused on flexibility"
 version = "0.1.0"
 edition = "2024"
+repository = "https://github.com/supersurviveur/formalith"
+license-file = "LICENSE"
+readme = "README.md"
+keywords = ["mathematics", "symbolic", "algebra"]
+categories = ["Mathematics", "Science"]
 
 [dependencies]
 append-only-vec = "0.1"

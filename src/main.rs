@@ -14,6 +14,7 @@ pub fn main() {
     println!("{}", parse!("x^2 + x^2", R));
     println!("{}", parse!("(x+y)^3", R).expand());
     println!("{}", parse!("71/1200 + (x^6*2)^-1", R));
+    println!("{}", parse!("-5+x", R));
 
     println!("{}", parse!("[[x, 4], [2, 3]]^-1", M));
     println!("{}", parse!("[[x, 4], [2, 3]]^-1", M).expand());

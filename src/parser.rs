@@ -34,7 +34,7 @@ impl Op {
 }
 
 /// Represent an error raised by the parser
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParserError {
     message: String,
 }
@@ -223,7 +223,7 @@ where
         let mut self_in_coefficient_set = self.clone();
         let node = set.parse_expression(self)?;
         let node = node.map_or_else(
-            || ParseUnary::<E, N>::parse_unary(self, priority, set),
+            || ParseUnary::<E, N>::parse_unary(self, set),
             |n| Ok(Some(n)),
         )?;
         let node_in_coefficient_set =
@@ -363,6 +363,16 @@ impl Parser<'_> {
             .map(|lit| Term::Value(Value::new(lit, set))))
     }
     /// Parse a literal living in the set `E`.
+    ///
+    /// ```rust
+    /// use formalith::{field::{real::R, matrix::M}, parser::Parser};
+    /// use typenum::U0;
+    ///
+    /// let mut parser = Parser::new("42/1700");
+    /// // Here we can set N = U0 to disallow any recursion in the parser
+    /// let n = parser.parse_literal::<_, U0>(R);
+    /// assert_eq!(n, Ok(Some(42.into())));
+    /// ```
     pub fn parse_literal<E: SetParseExpression<N>, N>(
         &mut self,
         set: E,
@@ -370,6 +380,19 @@ impl Parser<'_> {
         set.parse_literal(self).map_err(ParserError::new)
     }
     /// Calls `f` is the current token is a literal, and advance token if `f`. Returns `Ok(None)` otherwise.
+    ///
+    /// ```rust
+    /// use formalith::parser::Parser;
+    ///
+    /// let mut parser = Parser::new("5 + 3");
+    /// let n = parser.is_literal_and(|x| {
+    ///     assert_eq!(x, "5");
+    ///     x.parse()
+    ///         .map_err(|_| "failed to parse the literal".to_owned())
+    ///         .map(Some)
+    /// });
+    /// assert_eq!(n, Ok(Some(5)));
+    /// ```
     pub fn is_literal_and<E, F: Fn(&str) -> Result<Option<E>, String>>(
         &mut self,
         f: F,
@@ -383,32 +406,34 @@ impl Parser<'_> {
 }
 
 trait ParseUnary<E: Set, N> {
-    fn parse_unary(&mut self, _priority: usize, _set: E) -> Result<Option<Term<E>>, ParserError>;
+    fn parse_unary(&mut self, _set: E) -> Result<Option<Term<E>>, ParserError>;
 }
 
 impl<E: Set, N> ParseUnary<E, N> for Parser<'_> {
-    default fn parse_unary(
-        &mut self,
-        _priority: usize,
-        _set: E,
-    ) -> Result<Option<Term<E>>, ParserError> {
+    default fn parse_unary(&mut self, _set: E) -> Result<Option<Term<E>>, ParserError> {
         Ok(None)
     }
 }
 
 impl<E: Group, N> ParseUnary<E, N> for Parser<'_> {
-    fn parse_unary(&mut self, priority: usize, set: E) -> Result<Option<Term<E>>, ParserError> {
+    fn parse_unary(&mut self, set: E) -> Result<Option<Term<E>>, ParserError> {
         match self.get_op() {
             Some(Op::Add) => {
                 self.next_token();
-                ParserTraitBounded::<E, N>::parse_expression_bounded(self, priority, set)
+                ParserTraitBounded::<E, N>::parse_expression_bounded(
+                    self,
+                    Op::Add.get_priority(),
+                    set,
+                )
             }
             Some(Op::Substract) => {
                 self.next_token();
-                Ok(
-                    ParserTraitBounded::<E, N>::parse_expression_bounded(self, priority, set)?
-                        .map(|term| -term),
-                )
+                Ok(ParserTraitBounded::<E, N>::parse_expression_bounded(
+                    self,
+                    Op::Substract.get_priority(),
+                    set,
+                )?
+                .map(|term| -term))
             }
             _ => Ok(None),
         }
