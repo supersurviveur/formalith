@@ -8,7 +8,7 @@ append-only-vec = "0.1"
 dyn-clone = "1"
 dyn-eq = "0.1"
 dyn-hash = "1"
-malachite = { version = "0.8", default-features = false, features = ["naturals_and_integers", "rationals"] }
+malachite = { version = "0.9", default-features = false, features = ["naturals_and_integers", "rationals"] }
 owo-colors = "4"
 supports-color = "3"
 typenum = "1.19"
