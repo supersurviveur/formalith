@@ -10,11 +10,23 @@ use crate::{
 use super::{Flags, Term, Value};
 
 /// A sum of expressions.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(not(feature = "concise-debug"), derive(Debug))]
 pub struct Add<T: Set> {
     flags: u8,
     pub(crate) terms: Vec<Term<T>>,
     pub(crate) set: T,
+}
+
+#[cfg(feature = "concise-debug")]
+#[allow(clippy::missing_fields_in_debug)]
+impl<T: Set + std::fmt::Debug> std::fmt::Debug for Add<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Add")
+            .field("terms", &self.terms)
+            .field("set", &self.set)
+            .finish()
+    }
 }
 
 impl<T: Set> Flags for Add<T> {

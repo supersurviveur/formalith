@@ -23,9 +23,17 @@ use crate::{
 };
 
 /// The real field `{$RR$}`.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(not(feature = "concise-debug"), derive(Debug))]
 pub struct R<T> {
     phantom: PhantomData<T>,
+}
+
+#[cfg(feature = "concise-debug")]
+impl<T> std::fmt::Debug for R<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("R").finish()
+    }
 }
 
 impl<T: Clone> Copy for R<T> {}
@@ -280,9 +288,9 @@ impl Ring for R<Rational> {
 impl<N> SetParseExpression<N> for R<Rational> {
     fn parse_literal(&self, parser: &mut Parser) -> Result<Option<Self::Element>, String> {
         parser.is_literal_and(|value| {
-            Ok(Some(Rational::from_sci_string(value).ok_or_else(|| format!(
-                "Failed to parse \"{value}\" to malachite::Integer",
-            ))?))
+            Ok(Some(Rational::from_sci_string(value).ok_or_else(|| {
+                format!("Failed to parse \"{value}\" to malachite::Integer",)
+            })?))
         })
     }
 }

@@ -38,7 +38,8 @@ pub mod flags;
 use flags::{Flags, NORMALIZED};
 
 /// A mathematical expression.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(not(feature = "concise-debug"), derive(Debug))]
 pub enum Term<T: Set> {
     /// See [Value]
     Value(Value<T>),
@@ -52,6 +53,20 @@ pub enum Term<T: Set> {
     Pow(Pow<T>),
     /// See [Fun]
     Fun(Box<dyn Function<T>>),
+}
+
+#[cfg(feature = "concise-debug")]
+impl<T: Set + Debug> Debug for Term<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Value(arg0) => Debug::fmt(arg0, f),
+            Self::Symbol(arg0) => Debug::fmt(arg0, f),
+            Self::Add(arg0) => Debug::fmt(arg0, f),
+            Self::Mul(arg0) => Debug::fmt(arg0, f),
+            Self::Pow(arg0) => Debug::fmt(arg0, f),
+            Self::Fun(arg0) => Debug::fmt(arg0, f),
+        }
+    }
 }
 
 impl<T: PartiallyOrderedSet> std::cmp::PartialOrd for Term<T> {
@@ -141,6 +156,11 @@ impl<T: Set> From<Value<T>> for Term<T> {
 impl<T: Set> From<Pow<T>> for Term<T> {
     fn from(value: Pow<T>) -> Self {
         Self::Pow(value)
+    }
+}
+impl<T: Set> From<SymbolTerm<T>> for Term<T> {
+    fn from(value: SymbolTerm<T>) -> Self {
+        Self::Symbol(value)
     }
 }
 

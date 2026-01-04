@@ -8,12 +8,23 @@ use crate::{
 use super::{Flags, NORMALIZED};
 
 /// A constant in a mathematical expression, living in the algebraic set T
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(not(feature = "concise-debug"), derive(Debug))]
 #[allow(clippy::struct_field_names)]
 pub struct Value<T: Set, V = <T as Set>::Element> {
     flags: u8,
     pub(crate) value: V,
     pub(crate) set: T,
+}
+
+#[cfg(feature = "concise-debug")]
+impl<T: Set + std::fmt::Debug, V: std::fmt::Debug> std::fmt::Debug for Value<T, V> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Value")
+            .field(&self.value)
+            .field(&self.set)
+            .finish()
+    }
 }
 
 impl<T: Set> Value<T> {

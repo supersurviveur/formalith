@@ -42,8 +42,10 @@ pub struct ParserError {
 impl ParserError {
     /// Create a new parser error.
     #[must_use]
-    pub const fn new(message: String) -> Self {
-        Self { message }
+    pub fn new<T: Into<String>>(message: T) -> Self {
+        Self {
+            message: message.into(),
+        }
     }
 }
 
@@ -167,7 +169,7 @@ impl Parser<'_> {
     pub fn parse<E: Set>(&mut self, set: E) -> Result<Term<E>, ParserError> {
         Ok(
             ParserTraitBounded::<E, U10>::parse_expression_bounded(self, 0, set)?
-                .ok_or_else(|| ParserError::new("Input was empty".into()))?
+                .ok_or_else(|| ParserError::new("Input was empty"))?
                 .normalize(),
         )
     }
@@ -195,6 +197,7 @@ impl Parser<'_> {
         }
     }
 
+    /// parse arguments of a function, separated by a comma.
     fn parse_args<E: Set, N>(&mut self, arg_set: E) -> Result<Vec<Term<E>>, ParserError> {
         let mut args = vec![];
         args.push(ParserTraitBounded::<E, N>::parse_expression_bounded(self, 0, arg_set)?.unwrap());
@@ -360,7 +363,10 @@ impl<E: Ring, N> ParseBinary<E, N> for Parser<'_> {
                 true,
             ));
         }
-        Ok((current, false))
+        Err(ParserError::new(format!(
+            "Operand expected for binary operation {op:?} at position {}",
+            self.start_span
+        )))
     }
 }
 impl Parser<'_> {
@@ -470,4 +476,98 @@ macro_rules! parse {
     ( $($args:tt)* ) => {
         try_parse!($($args)*).unwrap()
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        field::{matrix::VectorSpaceElement, real::R},
+        term::{
+            Add,
+            flags::{Flags, NORMALIZED},
+        },
+    };
+
+    use typenum::U2;
+
+    #[test]
+    fn test_parse_args() {
+        let mut parser = Parser::new("5, 7");
+        let args = parser.parse_args::<_, U1>(R);
+        assert_eq!(args, Ok(vec![5.into(), 7.into()]));
+    }
+    #[test]
+    fn test_parse_function() {
+        let mut parser = Parser::new("abs(-5)");
+        let args = ParserTraitBounded::<_, U1>::parse_expression_bounded(&mut parser, 0, R);
+        assert_eq!(
+            args,
+            Ok(Some(Term::Fun(Box::new(Fun::new(
+                Context::ABS,
+                vec![(-5).into()],
+                R
+            )))))
+        );
+        let mut parser = Parser::new("det(1)");
+        let args = ParserTraitBounded::<_, U2>::parse_expression_bounded(&mut parser, 0, R);
+        assert_eq!(
+            args,
+            Ok(Some(Term::Fun(Box::new(Fun::<M<_>, _>::new(
+                Context::DET,
+                vec![VectorSpaceElement::Scalar(1.into(), R.get_term_set()).into()],
+                R
+            )))))
+        );
+    }
+    #[test]
+    fn test_parse_unary() {
+        let mut parser = Parser::new("-5");
+        let args = ParseUnary::<_, U1>::parse_unary(&mut parser, R);
+        assert_eq!(args, Ok(Some((-5).into())));
+
+        let mut parser = Parser::new("+5");
+        let args = ParseUnary::<_, U1>::parse_unary(&mut parser, R);
+        assert_eq!(args, Ok(Some(5.into())));
+    }
+    #[test]
+    fn test_parse_binary() {
+        let mut parser = Parser::new("x");
+        let args = ParseBinary::<_, U1>::parse_binary_expr(
+            &mut parser,
+            5.into(),
+            Err(ParserError::new("unreachable")),
+            Op::Add,
+            R,
+        );
+
+        let mut add = Term::Add(Add::new(
+            vec![SymbolTerm::new(Symbol::new("x"), R).into(), 5.into()],
+            R,
+        ));
+        add.add_flag(NORMALIZED);
+        assert_eq!(args, Ok((add, true)));
+
+        let mut parser = Parser::new("6");
+        let args = ParseBinary::<_, U1>::parse_binary_expr(
+            &mut parser,
+            5.into(),
+            Err(ParserError::new("unreachable")),
+            Op::Pow,
+            R,
+        );
+
+        assert_eq!(args, Ok((15625.into(), true)));
+
+        let mut parser = Parser::new("6");
+        let args = ParseBinary::<_, U1>::parse_binary_expr(
+            &mut parser,
+            5.into(),
+            Err(ParserError::new("unreachable")),
+            Op::Substract,
+            R,
+        );
+
+        assert_eq!(args, Ok(((-1).into(), true)));
+    }
 }

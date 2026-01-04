@@ -1,4 +1,4 @@
-COVERAGE=cargo llvm-cov --branch --doc
+COVERAGE=cargo llvm-cov --doctests
 coverage:
 	@$(COVERAGE) | bat --wrap=never
 

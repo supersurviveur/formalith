@@ -14,6 +14,7 @@ use crate::{
         real::R,
         try_from_expr_default,
     },
+    matrix::Matrix,
     term::{Term, TermSet, Value},
 };
 
@@ -66,8 +67,16 @@ impl<T: Set> TryElementFrom<TermSet<T>> for T {
     }
 }
 
-impl From<usize> for Term<R<Rational>> {
-    fn from(value: usize) -> Self {
-        Self::Value(Value::new(Rational::from(value), R))
+impl<T: Into<Rational>> From<T> for Term<R<Rational>> {
+    fn from(value: T) -> Self {
+        Self::Value(Value::new(value.into(), R))
+    }
+}
+
+impl From<VectorSpaceElement<TermSet<R<Rational>>, Matrix<TermSet<R<Rational>>>>>
+    for Term<M<TermSet<R<Rational>>>>
+{
+    fn from(value: VectorSpaceElement<TermSet<R<Rational>>, Matrix<TermSet<R<Rational>>>>) -> Self {
+        Self::Value(Value::new(value, M))
     }
 }

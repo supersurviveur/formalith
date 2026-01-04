@@ -26,4 +26,4 @@ tracing-subscriber = "0.3"
 
 [features]
 default = []
-rust-analyzer = []
+concise-debug = []

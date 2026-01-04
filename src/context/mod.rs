@@ -28,10 +28,10 @@ impl Symbol {
     /// ```
     /// use formalith::context::Symbol;
     ///
-    /// let x = Symbol::new("x".into());
-    /// let x2 = Symbol::new("x".into());
-    /// let y = Symbol::new("y".into());
-    /// let another_symbol = Symbol::new("aReallyLongSymbol".into());
+    /// let x = Symbol::new("x");
+    /// let x2 = Symbol::new("x");
+    /// let y = Symbol::new("y");
+    /// let another_symbol = Symbol::new("aReallyLongSymbol");
     ///
     /// assert_eq!(x, x2);
     /// assert_ne!(x, y);
@@ -40,11 +40,11 @@ impl Symbol {
     /// # Panics
     /// This function will panic if the lock on the global context is poisoned.
     #[must_use]
-    pub fn new(name: String) -> Self {
+    pub fn new<T: Into<String>>(name: T) -> Self {
         Context::get_global_context()
             .write()
             .unwrap()
-            .get_symbol(name)
+            .get_symbol(name.into())
     }
 }
 
@@ -83,11 +83,11 @@ impl PrettyPrint for Symbol {
 #[macro_export(local_inner_macros)]
 macro_rules! symbol {
     ( $x:expr ) => {
-        $crate::context::Symbol::new($x.into())
+        $crate::context::Symbol::new($x)
     };
     ( $x:expr, $f:expr) => {
         $crate::term::Term::Symbol($crate::term::SymbolTerm::new(
-            $crate::context::Symbol::new($x.into()),
+            $crate::context::Symbol::new($x),
             $f,
         ))
     };
